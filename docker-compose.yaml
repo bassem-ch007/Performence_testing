@@ -1,0 +1,343 @@
+# =====================================================================
+#  Monolith vs microservices performance test
+#
+#  Stacks (exclusive compose profiles, default set by COMPOSE_PROFILES in .env):
+#    microservices (default):  docker compose up -d --build
+#    monolith:                 docker compose --profile monolith up -d --build
+#  Stop everything:            docker compose --profile "*" down
+#
+#  Always started: postgres, pgadmin and the observability stack
+#    Grafana http://localhost:3000 | Prometheus http://localhost:9090
+#    Loki http://localhost:3100    | cAdvisor   http://localhost:8088
+#
+#  Load test (k6):  docker compose run --rm -e ARCH=monolith k6
+#                   docker compose run --rm -e ARCH=microservices k6
+# =====================================================================
+
+# Shared settings for the Spring Boot applications
+x-app-env: &app-env
+  SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+  DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+  POSTGRES_USER: ${POSTGRES_USER}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  JAVA_OPTS: ${JAVA_OPTS:--XX:MaxRAMPercentage=75.0}
+  # SQL logging off for both architectures: it distorts measurements and floods Loki
+  SPRING_JPA_SHOW_SQL: "false"
+  # JSON logs, parsed by Fluent Bit
+  LOGGING_STRUCTURED_FORMAT_CONSOLE: logstash
+
+x-app-healthcheck: &app-healthcheck
+  interval: 10s
+  timeout: 5s
+  retries: 12
+  start_period: 30s
+
+# stdout of the apps -> Fluent Bit (forward protocol) -> Loki.
+# "docker logs" keeps working thanks to Docker's dual logging.
+x-app-logging: &app-logging
+  driver: fluentd
+  options:
+    fluentd-address: localhost:24224
+    fluentd-async: "true"
+    tag: app.{{.Name}}
+    env: ARCHITECTURE
+
+services:
+  # ------------------------------------------------------------------ data
+  postgres:
+    image: postgres:17-alpine
+    container_name: postgres_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin-ui
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - backend_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ------------------------------------------------------------------ applications
+  # Resource limits: both architectures get the SAME total budget
+  # (monolith: 3 CPU / 3 GB  vs  microservices: 3 x (1 CPU / 1 GB)). Override in .env.
+
+  ecommerce-mono:
+    profiles: ["monolith"]
+    build: ./ecommerceMono
+    image: performance-test/ecommerce-mono:latest
+    container_name: ecommerce-mono
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      ARCHITECTURE: monolith
+    ports:
+      - "8080:8080"
+    networks:
+      - backend_network
+    logging: *app-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "${MONO_CPUS:-3}"
+          memory: ${MONO_MEMORY:-3g}
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "curl", "-fs", "http://localhost:8080/actuator/health"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      fluent-bit:
+        condition: service_started
+
+  user-service:
+    profiles: ["microservices"]
+    build: ./user-service
+    image: performance-test/user-service:latest
+    container_name: user-service
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      ARCHITECTURE: microservices
+    ports:
+      - "8081:8081"   # REST
+      - "9091:9091"   # gRPC
+    networks:
+      - backend_network
+    logging: *app-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "${SERVICE_CPUS:-1}"
+          memory: ${SERVICE_MEMORY:-1g}
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "curl", "-fs", "http://localhost:8081/actuator/health"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      fluent-bit:
+        condition: service_started
+
+  product-service:
+    profiles: ["microservices"]
+    build: ./product-service
+    image: performance-test/product-service:latest
+    container_name: product-service
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      ARCHITECTURE: microservices
+    ports:
+      - "8082:8082"   # REST
+      - "9092:9092"   # gRPC
+    networks:
+      - backend_network
+    logging: *app-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "${SERVICE_CPUS:-1}"
+          memory: ${SERVICE_MEMORY:-1g}
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "curl", "-fs", "http://localhost:8082/actuator/health"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      fluent-bit:
+        condition: service_started
+
+  order-service:
+    profiles: ["microservices"]
+    build: ./order-service
+    image: performance-test/order-service:latest
+    container_name: order-service
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      ARCHITECTURE: microservices
+      # gRPC clients reach the other services through the compose network
+      USER_GRPC_TARGET: user-service:9091
+      PRODUCT_GRPC_TARGET: product-service:9092
+    ports:
+      - "8083:8083"   # REST
+      - "9093:9093"   # gRPC
+    networks:
+      - backend_network
+    logging: *app-logging
+    deploy:
+      resources:
+        limits:
+          cpus: "${SERVICE_CPUS:-1}"
+          memory: ${SERVICE_MEMORY:-1g}
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "curl", "-fs", "http://localhost:8083/actuator/health"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      fluent-bit:
+        condition: service_started
+      user-service:
+        condition: service_healthy
+      product-service:
+        condition: service_healthy
+
+  # ------------------------------------------------------------------ observability
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-remote-write-receiver   # k6 pushes its client-side metrics here
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - backend_network
+
+  loki:
+    image: grafana/loki:3.5.3
+    container_name: loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki_data:/loki
+    ports:
+      - "3100:3100"
+    networks:
+      - backend_network
+
+  fluent-bit:
+    image: fluent/fluent-bit:4.0.5
+    container_name: fluent-bit
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
+      - ./monitoring/fluent-bit/parsers.conf:/fluent-bit/etc/parsers.conf:ro
+      - ./monitoring/fluent-bit/normalize.lua:/fluent-bit/etc/normalize.lua:ro
+    ports:
+      - "24224:24224"       # forward input used by the docker logging driver
+      - "24224:24224/udp"
+      - "2020:2020"         # fluent-bit metrics
+    networks:
+      - backend_network
+    depends_on:
+      - loki
+
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    container_name: node-exporter
+    restart: unless-stopped
+    pid: host
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+    ports:
+      - "9100:9100"
+    networks:
+      - backend_network
+
+  cadvisor:
+    image: ghcr.io/google/cadvisor:0.55.0
+    container_name: cadvisor
+    restart: unless-stopped
+    privileged: true
+    command:
+      - --docker_only=true
+      - --housekeeping_interval=5s
+      - --store_container_labels=false
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "8088:8080"
+    networks:
+      - backend_network
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/architecture-comparison.json
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - backend_network
+    depends_on:
+      - prometheus
+      - loki
+
+  # ------------------------------------------------------------------ load test
+  k6:
+    profiles: ["loadtest"]
+    image: grafana/k6:1.1.0
+    container_name: k6
+    environment:
+      ARCH: ${ARCH:-microservices}
+      TEST_PROFILE: ${TEST_PROFILE:-load}
+      K6_PROMETHEUS_RW_SERVER_URL: http://prometheus:9090/api/v1/write
+      K6_PROMETHEUS_RW_TREND_STATS: p(50),p(95),p(99),avg,max
+    command: ["run", "-o", "experimental-prometheus-rw", "/scripts/script.js"]
+    volumes:
+      - ./loadtest/k6:/scripts:ro
+      - ./loadtest/results:/results
+    networks:
+      - backend_network
+
+volumes:
+  postgres_data:
+  pgadmin_data:
+  prometheus_data:
+  loki_data:
+  grafana_data:
+
+networks:
+  backend_network:
+    driver: bridge

@@ -1,0 +1,26 @@
+spring:
+  application:
+    name: ecommerceMono
+  profiles:
+    default: dev
+  config:
+    # Spring does not read .env files by itself: import them as properties
+    # (module dir first, then the repository root when started from there).
+    import:
+      - optional:file:.env[.properties]
+      - optional:file:./ecommerceMono/.env[.properties]
+server:
+  port: 8080
+
+management:
+  metrics:
+    tags:
+      # common labels on every metric, used by the Grafana comparison dashboard
+      application: ${spring.application.name}
+      architecture: ${ARCHITECTURE:local}
+    distribution:
+      # histogram buckets so Prometheus can compute p50/p95/p99 latencies
+      percentiles-histogram:
+        "[http.server.requests]": true
+        "[grpc.server]": true
+        "[grpc.client]": true

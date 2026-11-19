@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: order-service
+  profiles:
+    default: dev
+  config:
+    # Spring does not read .env files by itself: import them as properties
+    import:
+      - optional:file:.env[.properties]
+      - optional:file:../.env[.properties]
+  jpa:
+    open-in-view: false
+    properties:
+      hibernate:
+        # each service owns its own schema inside the shared database
+        default_schema: order_service
+        hbm2ddl:
+          create_namespaces: true
+  grpc:
+    server:
+      port: ${ORDER_GRPC_PORT:9093}
+    client:
+      # named channels used by GrpcClientConfig (plaintext, no TLS)
+      channel:
+        user-service:
+          target: ${USER_GRPC_TARGET:localhost:9091}
+        product-service:
+          target: ${PRODUCT_GRPC_TARGET:localhost:9092}
+
+server:
+  port: ${ORDER_HTTP_PORT:8083}
+
+management:
+  metrics:
+    tags:
+      # common labels on every metric, used by the Grafana comparison dashboard
+      application: ${spring.application.name}
+      architecture: ${ARCHITECTURE:local}
+    distribution:
+      # histogram buckets so Prometheus can compute p50/p95/p99 latencies
+      percentiles-histogram:
+        "[http.server.requests]": true
+        "[grpc.server]": true
+        "[grpc.client]": true

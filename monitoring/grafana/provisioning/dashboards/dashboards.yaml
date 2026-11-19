@@ -1,0 +1,10 @@
+apiVersion: 1
+
+providers:
+  - name: performance-test
+    folder: Performance test
+    type: file
+    disableDeletion: false
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

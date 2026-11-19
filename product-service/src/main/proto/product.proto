@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package ecommerce.product;
+
+option java_multiple_files = true;
+option java_package = "com.iyedbassem.grpc.product";
+option java_outer_classname = "ProductProto";
+
+// Exposed by product-service, consumed by order-service.
+service ProductGrpcService {
+  rpc GetProduct (GetProductRequest) returns (ProductReply);
+}
+
+message GetProductRequest {
+  int64 id = 1;
+}
+
+message ProductReply {
+  bool found = 1;
+  int64 id = 2;
+  string name = 3;
+  // BigDecimal serialized as a plain string to keep precision
+  string price = 4;
+  int32 stock_quantity = 5;
+  bool active = 6;
+}

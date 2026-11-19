@@ -1,0 +1,9 @@
+# build output and IDE files
+target/
+.idea/
+*.iml
+.vscode/
+HELP.md
+
+# local env files point to localhost; containers get their config from docker-compose
+.env
