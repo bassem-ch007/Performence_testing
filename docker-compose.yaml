@@ -7,7 +7,8 @@
 #  Stop everything:            docker compose --profile "*" down
 #
 #  Always started: postgres, pgadmin and the observability stack
-#    Grafana http://localhost:3000 | Prometheus http://localhost:9090
+#    Grafana http://localhost:3000 (dashboards: Monolith / Microservices)
+#    Prometheus http://localhost:9090
 #    Loki http://localhost:3100    | cAdvisor   http://localhost:8088
 #
 #  Load test (k6):  docker compose run --rm -e ARCH=monolith k6
@@ -90,6 +91,12 @@ services:
     build: ./ecommerceMono
     image: performance-test/ecommerce-mono:latest
     container_name: ecommerce-mono
+    labels:
+      # picked up by Prometheus docker service discovery
+      prometheus.scrape: "true"
+      prometheus.port: "8080"
+      prometheus.path: /actuator/prometheus
+      architecture: monolith
     restart: unless-stopped
     environment:
       <<: *app-env
@@ -118,6 +125,12 @@ services:
     build: ./user-service
     image: performance-test/user-service:latest
     container_name: user-service
+    labels:
+      # picked up by Prometheus docker service discovery
+      prometheus.scrape: "true"
+      prometheus.port: "8081"
+      prometheus.path: /actuator/prometheus
+      architecture: microservices
     restart: unless-stopped
     environment:
       <<: *app-env
@@ -147,6 +160,12 @@ services:
     build: ./product-service
     image: performance-test/product-service:latest
     container_name: product-service
+    labels:
+      # picked up by Prometheus docker service discovery
+      prometheus.scrape: "true"
+      prometheus.port: "8082"
+      prometheus.path: /actuator/prometheus
+      architecture: microservices
     restart: unless-stopped
     environment:
       <<: *app-env
@@ -176,6 +195,12 @@ services:
     build: ./order-service
     image: performance-test/order-service:latest
     container_name: order-service
+    labels:
+      # picked up by Prometheus docker service discovery
+      prometheus.scrape: "true"
+      prometheus.port: "8083"
+      prometheus.path: /actuator/prometheus
+      architecture: microservices
     restart: unless-stopped
     environment:
       <<: *app-env
@@ -216,8 +241,10 @@ services:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.retention.time=15d
       - --web.enable-remote-write-receiver   # k6 pushes its client-side metrics here
+    user: root   # needs read access to the docker socket (service discovery)
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - prometheus_data:/prometheus
     ports:
       - "9090:9090"
@@ -301,7 +328,6 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
-      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/architecture-comparison.json
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro

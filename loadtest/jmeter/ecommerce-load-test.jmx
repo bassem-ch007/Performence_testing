@@ -1,0 +1,498 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+<hashTree>
+<TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="E-commerce load test (monolith vs microservices)">
+      <stringProp name="TestPlan.comments">Same workload for both architectures. Non-GUI run: jmeter -n -t ecommerce-load-test.jmx -q monolith.properties (or microservices.properties) -l results.jtl -e -o report. Tunables (-J): threads, rampup (s), duration (s), think_ms, products.</stringProp>
+      <boolProp name="TestPlan.functional_mode">false</boolProp>
+      <boolProp name="TestPlan.tearDown_on_shutdown">true</boolProp>
+      <boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
+      <elementProp name="TestPlan.user_defined_variables" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" testname="User Defined Variables">
+        <collectionProp name="Arguments.arguments"/>
+      </elementProp>
+    </TestPlan>
+<hashTree><Arguments guiclass="ArgumentsPanel" testclass="Arguments" testname="Configuration (set with -q &lt;arch&gt;.properties or -J)">
+      <collectionProp name="Arguments.arguments">
+          <elementProp name="ARCH" elementType="Argument">
+            <stringProp name="Argument.name">ARCH</stringProp>
+            <stringProp name="Argument.value">${__P(arch,monolith)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="USER_HOST" elementType="Argument">
+            <stringProp name="Argument.name">USER_HOST</stringProp>
+            <stringProp name="Argument.value">${__P(user.host,localhost)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="USER_PORT" elementType="Argument">
+            <stringProp name="Argument.name">USER_PORT</stringProp>
+            <stringProp name="Argument.value">${__P(user.port,8080)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="PRODUCT_HOST" elementType="Argument">
+            <stringProp name="Argument.name">PRODUCT_HOST</stringProp>
+            <stringProp name="Argument.value">${__P(product.host,localhost)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="PRODUCT_PORT" elementType="Argument">
+            <stringProp name="Argument.name">PRODUCT_PORT</stringProp>
+            <stringProp name="Argument.value">${__P(product.port,8080)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="ORDER_HOST" elementType="Argument">
+            <stringProp name="Argument.name">ORDER_HOST</stringProp>
+            <stringProp name="Argument.value">${__P(order.host,localhost)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="ORDER_PORT" elementType="Argument">
+            <stringProp name="Argument.name">ORDER_PORT</stringProp>
+            <stringProp name="Argument.value">${__P(order.port,8080)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="THREADS" elementType="Argument">
+            <stringProp name="Argument.name">THREADS</stringProp>
+            <stringProp name="Argument.value">${__P(threads,50)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="SEED_USERS" elementType="Argument">
+            <stringProp name="Argument.name">SEED_USERS</stringProp>
+            <stringProp name="Argument.value">${__P(threads,50)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="SEED_PRODUCTS" elementType="Argument">
+            <stringProp name="Argument.name">SEED_PRODUCTS</stringProp>
+            <stringProp name="Argument.value">${__P(products,50)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+      </collectionProp>
+    </Arguments>
+<hashTree></hashTree>
+<ConfigTestElement guiclass="HttpDefaultsGui" testclass="ConfigTestElement" testname="HTTP Request Defaults">
+      <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables">
+        <collectionProp name="Arguments.arguments"/>
+      </elementProp>
+      <stringProp name="HTTPSampler.protocol">http</stringProp>
+      <stringProp name="HTTPSampler.implementation">HttpClient4</stringProp>
+      <stringProp name="HTTPSampler.connect_timeout">5000</stringProp>
+      <stringProp name="HTTPSampler.response_timeout">30000</stringProp>
+    </ConfigTestElement>
+<hashTree></hashTree>
+<SetupThreadGroup guiclass="SetupThreadGroupGui" testclass="SetupThreadGroup" testname="setUp - seed users and products">
+      <stringProp name="ThreadGroup.on_sample_error">stoptest</stringProp>
+      <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller">
+        <boolProp name="LoopController.continue_forever">false</boolProp>
+        <stringProp name="LoopController.loops">1</stringProp>
+      </elementProp>
+      <stringProp name="ThreadGroup.num_threads">1</stringProp>
+      <stringProp name="ThreadGroup.ramp_time">1</stringProp>
+      <boolProp name="ThreadGroup.scheduler">false</boolProp>
+      <stringProp name="ThreadGroup.duration"></stringProp>
+      <stringProp name="ThreadGroup.delay"></stringProp>
+      <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+    </SetupThreadGroup>
+<hashTree><HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="JSON headers">
+      <collectionProp name="HeaderManager.headers">
+        <elementProp name="" elementType="Header">
+            <stringProp name="Header.name">Content-Type</stringProp>
+            <stringProp name="Header.value">application/json</stringProp>
+          </elementProp>
+      </collectionProp>
+    </HeaderManager>
+<hashTree></hashTree>
+<LoopController guiclass="LoopControlPanel" testclass="LoopController" testname="Create users (one per thread)">
+      <boolProp name="LoopController.continue_forever">true</boolProp>
+      <stringProp name="LoopController.loops">${SEED_USERS}</stringProp>
+    </LoopController>
+<hashTree><HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="setup POST /users">
+      <stringProp name="HTTPSampler.domain">${USER_HOST}</stringProp>
+      <stringProp name="HTTPSampler.port">${USER_PORT}</stringProp>
+      <stringProp name="HTTPSampler.path">/api/v1/users</stringProp>
+      <stringProp name="HTTPSampler.method">POST</stringProp>
+      <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+      <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+      <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+      <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+        <collectionProp name="Arguments.arguments">
+          <elementProp name="" elementType="HTTPArgument">
+            <boolProp name="HTTPArgument.always_encode">false</boolProp>
+            <stringProp name="Argument.value">{"firstName":"jmeter${__counter(FALSE,)}","lastName":"load","email":"jmeter.${__UUID()}@test.local","phone":"000","address":{"street":"s","city":"c","zipCode":"z","state":"st","country":"tn"}}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+        </collectionProp>
+      </elementProp>
+    </HTTPSamplerProxy>
+<hashTree><ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="HTTP 201">
+      <collectionProp name="Asserion.test_strings">
+        <stringProp name="49586">201</stringProp>
+      </collectionProp>
+      <stringProp name="Assertion.custom_message">expected HTTP 201</stringProp>
+      <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
+      <boolProp name="Assertion.assume_success">false</boolProp>
+      <intProp name="Assertion.test_type">8</intProp>
+    </ResponseAssertion>
+<hashTree></hashTree>
+</hashTree>
+</hashTree>
+<LoopController guiclass="LoopControlPanel" testclass="LoopController" testname="Create products">
+      <boolProp name="LoopController.continue_forever">true</boolProp>
+      <stringProp name="LoopController.loops">${SEED_PRODUCTS}</stringProp>
+    </LoopController>
+<hashTree><HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="setup POST /products">
+      <stringProp name="HTTPSampler.domain">${PRODUCT_HOST}</stringProp>
+      <stringProp name="HTTPSampler.port">${PRODUCT_PORT}</stringProp>
+      <stringProp name="HTTPSampler.path">/api/v1/products</stringProp>
+      <stringProp name="HTTPSampler.method">POST</stringProp>
+      <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+      <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+      <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+      <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+        <collectionProp name="Arguments.arguments">
+          <elementProp name="" elementType="HTTPArgument">
+            <boolProp name="HTTPArgument.always_encode">false</boolProp>
+            <stringProp name="Argument.value">{"name":"product ${__UUID()}","description":"jmeter load test product","price":${__Random(10,99)}.99,"stockQuantity":1000000000,"category":"loadtest","imageUrl":"http://img/x.png"}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+        </collectionProp>
+      </elementProp>
+    </HTTPSamplerProxy>
+<hashTree><ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="HTTP 201">
+      <collectionProp name="Asserion.test_strings">
+        <stringProp name="49586">201</stringProp>
+      </collectionProp>
+      <stringProp name="Assertion.custom_message">expected HTTP 201</stringProp>
+      <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
+      <boolProp name="Assertion.assume_success">false</boolProp>
+      <intProp name="Assertion.test_type">8</intProp>
+    </ResponseAssertion>
+<hashTree></hashTree>
+</hashTree>
+</hashTree>
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="setup GET /users">
+      <stringProp name="HTTPSampler.domain">${USER_HOST}</stringProp>
+      <stringProp name="HTTPSampler.port">${USER_PORT}</stringProp>
+      <stringProp name="HTTPSampler.path">/api/v1/users</stringProp>
+      <stringProp name="HTTPSampler.method">GET</stringProp>
+      <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+      <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+      
+      <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables"><collectionProp name="Arguments.arguments"/></elementProp>
+    </HTTPSamplerProxy>
+<hashTree><ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="HTTP 200">
+      <collectionProp name="Asserion.test_strings">
+        <stringProp name="49586">200</stringProp>
+      </collectionProp>
+      <stringProp name="Assertion.custom_message">expected HTTP 200</stringProp>
+      <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
+      <boolProp name="Assertion.assume_success">false</boolProp>
+      <intProp name="Assertion.test_type">8</intProp>
+    </ResponseAssertion>
+<hashTree></hashTree>
+<JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Collect user ids">
+      <stringProp name="scriptLanguage">groovy</stringProp>
+      <stringProp name="parameters"></stringProp>
+      <stringProp name="filename"></stringProp>
+      <stringProp name="cacheKey">true</stringProp>
+      <stringProp name="script">import groovy.json.JsonSlurper
+// keep only the rows created by this run (the last N ids returned by the list endpoint)
+def wanted = Integer.parseInt(vars.get('SEED_USERS'))
+def ids = new JsonSlurper().parseText(prev.getResponseDataAsString()).collect { it.id.toString() }
+if (ids.size() &lt; wanted) {
+    prev.setSuccessful(false)
+    prev.setResponseMessage("seeding failed: expected ${wanted} users, found ${ids.size()}")
+    return
+}
+def kept = ids.takeRight(wanted)
+props.put('seed.userIds', kept)
+log.info("[seed] ${kept.size()} users ready: ${kept.first()}..${kept.last()}")
+</stringProp>
+    </JSR223PostProcessor>
+<hashTree></hashTree>
+</hashTree>
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="setup GET /products">
+      <stringProp name="HTTPSampler.domain">${PRODUCT_HOST}</stringProp>
+      <stringProp name="HTTPSampler.port">${PRODUCT_PORT}</stringProp>
+      <stringProp name="HTTPSampler.path">/api/v1/products</stringProp>
+      <stringProp name="HTTPSampler.method">GET</stringProp>
+      <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+      <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+      
+      <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables"><collectionProp name="Arguments.arguments"/></elementProp>
+    </HTTPSamplerProxy>
+<hashTree><ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="HTTP 200">
+      <collectionProp name="Asserion.test_strings">
+        <stringProp name="49586">200</stringProp>
+      </collectionProp>
+      <stringProp name="Assertion.custom_message">expected HTTP 200</stringProp>
+      <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
+      <boolProp name="Assertion.assume_success">false</boolProp>
+      <intProp name="Assertion.test_type">8</intProp>
+    </ResponseAssertion>
+<hashTree></hashTree>
+<JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Collect product ids">
+      <stringProp name="scriptLanguage">groovy</stringProp>
+      <stringProp name="parameters"></stringProp>
+      <stringProp name="filename"></stringProp>
+      <stringProp name="cacheKey">true</stringProp>
+      <stringProp name="script">import groovy.json.JsonSlurper
+// keep only the rows created by this run (the last N ids returned by the list endpoint)
+def wanted = Integer.parseInt(vars.get('SEED_PRODUCTS'))
+def ids = new JsonSlurper().parseText(prev.getResponseDataAsString()).collect { it.id.toString() }
+if (ids.size() &lt; wanted) {
+    prev.setSuccessful(false)
+    prev.setResponseMessage("seeding failed: expected ${wanted} products, found ${ids.size()}")
+    return
+}
+def kept = ids.takeRight(wanted)
+props.put('seed.productIds', kept)
+log.info("[seed] ${kept.size()} products ready: ${kept.first()}..${kept.last()}")
+</stringProp>
+    </JSR223PostProcessor>
+<hashTree></hashTree>
+</hashTree>
+</hashTree>
+<ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Shopping users">
+      <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+      <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller">
+        <boolProp name="LoopController.continue_forever">false</boolProp>
+        <stringProp name="LoopController.loops">-1</stringProp>
+      </elementProp>
+      <stringProp name="ThreadGroup.num_threads">${THREADS}</stringProp>
+      <stringProp name="ThreadGroup.ramp_time">${__P(rampup,60)}</stringProp>
+      <boolProp name="ThreadGroup.scheduler">true</boolProp>
+      <stringProp name="ThreadGroup.duration">${__P(duration,300)}</stringProp>
+      <stringProp name="ThreadGroup.delay">0</stringProp>
+      <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+    </ThreadGroup>
+<hashTree><HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="JSON + X-User-ID headers">
+      <collectionProp name="HeaderManager.headers">
+        <elementProp name="" elementType="Header">
+            <stringProp name="Header.name">Content-Type</stringProp>
+            <stringProp name="Header.value">application/json</stringProp>
+          </elementProp><elementProp name="" elementType="Header">
+            <stringProp name="Header.name">X-User-ID</stringProp>
+            <stringProp name="Header.value">${userId}</stringProp>
+          </elementProp>
+      </collectionProp>
+    </HeaderManager>
+<hashTree></hashTree>
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET /products">
+      <stringProp name="HTTPSampler.domain">${PRODUCT_HOST}</stringProp>
+      <stringProp name="HTTPSampler.port">${PRODUCT_PORT}</stringProp>
+      <stringProp name="HTTPSampler.path">/api/v1/products</stringProp>
+      <stringProp name="HTTPSampler.method">GET</stringProp>
+      <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+      <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+      
+      <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables"><collectionProp name="Arguments.arguments"/></elementProp>
+    </HTTPSamplerProxy>
+<hashTree><JSR223PreProcessor guiclass="TestBeanGUI" testclass="JSR223PreProcessor" testname="Pick user (per thread) and products (random)">
+      <stringProp name="scriptLanguage">groovy</stringProp>
+      <stringProp name="parameters"></stringProp>
+      <stringProp name="filename"></stringProp>
+      <stringProp name="cacheKey">true</stringProp>
+      <stringProp name="script">// One dedicated user per thread: no concurrent writes on the same cart.
+// Products are spread deterministically over (thread, iteration), so both architectures
+// receive exactly the same sequence of requests.
+// Note: no JDK class is referenced on purpose (no Math, Random...): the Groovy 3 engine bundled
+// with JMeter 5.6.3 cannot resolve JDK classes when JMeter runs on Java 25.
+def users = props.get('seed.userIds')
+def products = props.get('seed.productIds')
+int t = ctx.getThreadNum()
+int it = vars.getIteration()
+int n = products.size()
+vars.put('userId', users[t % users.size()])
+vars.put('productId', products[(t * 7919 + it * 104729) % n])
+vars.put('productId2', products[(t * 15485863 + it * 32452843 + 1) % n])
+</stringProp>
+    </JSR223PreProcessor>
+<hashTree></hashTree>
+<ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="HTTP 200">
+      <collectionProp name="Asserion.test_strings">
+        <stringProp name="49586">200</stringProp>
+      </collectionProp>
+      <stringProp name="Assertion.custom_message">expected HTTP 200</stringProp>
+      <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
+      <boolProp name="Assertion.assume_success">false</boolProp>
+      <intProp name="Assertion.test_type">8</intProp>
+    </ResponseAssertion>
+<hashTree></hashTree>
+</hashTree>
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET /products/{id}">
+      <stringProp name="HTTPSampler.domain">${PRODUCT_HOST}</stringProp>
+      <stringProp name="HTTPSampler.port">${PRODUCT_PORT}</stringProp>
+      <stringProp name="HTTPSampler.path">/api/v1/products/${productId}</stringProp>
+      <stringProp name="HTTPSampler.method">GET</stringProp>
+      <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+      <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+      
+      <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables"><collectionProp name="Arguments.arguments"/></elementProp>
+    </HTTPSamplerProxy>
+<hashTree><ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="HTTP 200">
+      <collectionProp name="Asserion.test_strings">
+        <stringProp name="49586">200</stringProp>
+      </collectionProp>
+      <stringProp name="Assertion.custom_message">expected HTTP 200</stringProp>
+      <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
+      <boolProp name="Assertion.assume_success">false</boolProp>
+      <intProp name="Assertion.test_type">8</intProp>
+    </ResponseAssertion>
+<hashTree></hashTree>
+</hashTree>
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET /products/search">
+      <stringProp name="HTTPSampler.domain">${PRODUCT_HOST}</stringProp>
+      <stringProp name="HTTPSampler.port">${PRODUCT_PORT}</stringProp>
+      <stringProp name="HTTPSampler.path">/api/v1/products/search?keyword=product</stringProp>
+      <stringProp name="HTTPSampler.method">GET</stringProp>
+      <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+      <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+      
+      <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables"><collectionProp name="Arguments.arguments"/></elementProp>
+    </HTTPSamplerProxy>
+<hashTree><ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="HTTP 200">
+      <collectionProp name="Asserion.test_strings">
+        <stringProp name="49586">200</stringProp>
+      </collectionProp>
+      <stringProp name="Assertion.custom_message">expected HTTP 200</stringProp>
+      <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
+      <boolProp name="Assertion.assume_success">false</boolProp>
+      <intProp name="Assertion.test_type">8</intProp>
+    </ResponseAssertion>
+<hashTree></hashTree>
+</hashTree>
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET /users/{id}">
+      <stringProp name="HTTPSampler.domain">${USER_HOST}</stringProp>
+      <stringProp name="HTTPSampler.port">${USER_PORT}</stringProp>
+      <stringProp name="HTTPSampler.path">/api/v1/users/${userId}</stringProp>
+      <stringProp name="HTTPSampler.method">GET</stringProp>
+      <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+      <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+      
+      <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables"><collectionProp name="Arguments.arguments"/></elementProp>
+    </HTTPSamplerProxy>
+<hashTree><ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="HTTP 200">
+      <collectionProp name="Asserion.test_strings">
+        <stringProp name="49586">200</stringProp>
+      </collectionProp>
+      <stringProp name="Assertion.custom_message">expected HTTP 200</stringProp>
+      <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
+      <boolProp name="Assertion.assume_success">false</boolProp>
+      <intProp name="Assertion.test_type">8</intProp>
+    </ResponseAssertion>
+<hashTree></hashTree>
+</hashTree>
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST /carts">
+      <stringProp name="HTTPSampler.domain">${ORDER_HOST}</stringProp>
+      <stringProp name="HTTPSampler.port">${ORDER_PORT}</stringProp>
+      <stringProp name="HTTPSampler.path">/api/v1/carts</stringProp>
+      <stringProp name="HTTPSampler.method">POST</stringProp>
+      <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+      <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+      <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+      <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+        <collectionProp name="Arguments.arguments">
+          <elementProp name="" elementType="HTTPArgument">
+            <boolProp name="HTTPArgument.always_encode">false</boolProp>
+            <stringProp name="Argument.value">{"productId":${productId},"quantity":1}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+        </collectionProp>
+      </elementProp>
+    </HTTPSamplerProxy>
+<hashTree><ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="HTTP 201">
+      <collectionProp name="Asserion.test_strings">
+        <stringProp name="49586">201</stringProp>
+      </collectionProp>
+      <stringProp name="Assertion.custom_message">expected HTTP 201</stringProp>
+      <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
+      <boolProp name="Assertion.assume_success">false</boolProp>
+      <intProp name="Assertion.test_type">8</intProp>
+    </ResponseAssertion>
+<hashTree></hashTree>
+</hashTree>
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST /carts">
+      <stringProp name="HTTPSampler.domain">${ORDER_HOST}</stringProp>
+      <stringProp name="HTTPSampler.port">${ORDER_PORT}</stringProp>
+      <stringProp name="HTTPSampler.path">/api/v1/carts</stringProp>
+      <stringProp name="HTTPSampler.method">POST</stringProp>
+      <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+      <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+      <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+      <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+        <collectionProp name="Arguments.arguments">
+          <elementProp name="" elementType="HTTPArgument">
+            <boolProp name="HTTPArgument.always_encode">false</boolProp>
+            <stringProp name="Argument.value">{"productId":${productId2},"quantity":1}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+        </collectionProp>
+      </elementProp>
+    </HTTPSamplerProxy>
+<hashTree><ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="HTTP 201">
+      <collectionProp name="Asserion.test_strings">
+        <stringProp name="49586">201</stringProp>
+      </collectionProp>
+      <stringProp name="Assertion.custom_message">expected HTTP 201</stringProp>
+      <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
+      <boolProp name="Assertion.assume_success">false</boolProp>
+      <intProp name="Assertion.test_type">8</intProp>
+    </ResponseAssertion>
+<hashTree></hashTree>
+</hashTree>
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET /carts">
+      <stringProp name="HTTPSampler.domain">${ORDER_HOST}</stringProp>
+      <stringProp name="HTTPSampler.port">${ORDER_PORT}</stringProp>
+      <stringProp name="HTTPSampler.path">/api/v1/carts</stringProp>
+      <stringProp name="HTTPSampler.method">GET</stringProp>
+      <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+      <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+      
+      <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables"><collectionProp name="Arguments.arguments"/></elementProp>
+    </HTTPSamplerProxy>
+<hashTree><ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="HTTP 200">
+      <collectionProp name="Asserion.test_strings">
+        <stringProp name="49586">200</stringProp>
+      </collectionProp>
+      <stringProp name="Assertion.custom_message">expected HTTP 200</stringProp>
+      <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
+      <boolProp name="Assertion.assume_success">false</boolProp>
+      <intProp name="Assertion.test_type">8</intProp>
+    </ResponseAssertion>
+<hashTree></hashTree>
+</hashTree>
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST /orders">
+      <stringProp name="HTTPSampler.domain">${ORDER_HOST}</stringProp>
+      <stringProp name="HTTPSampler.port">${ORDER_PORT}</stringProp>
+      <stringProp name="HTTPSampler.path">/api/v1/orders</stringProp>
+      <stringProp name="HTTPSampler.method">POST</stringProp>
+      <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+      <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+      <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+      <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+        <collectionProp name="Arguments.arguments">
+          <elementProp name="" elementType="HTTPArgument">
+            <boolProp name="HTTPArgument.always_encode">false</boolProp>
+            <stringProp name="Argument.value"></stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+        </collectionProp>
+      </elementProp>
+    </HTTPSamplerProxy>
+<hashTree><ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="HTTP 201">
+      <collectionProp name="Asserion.test_strings">
+        <stringProp name="49586">201</stringProp>
+      </collectionProp>
+      <stringProp name="Assertion.custom_message">expected HTTP 201</stringProp>
+      <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
+      <boolProp name="Assertion.assume_success">false</boolProp>
+      <intProp name="Assertion.test_type">8</intProp>
+    </ResponseAssertion>
+<hashTree></hashTree>
+</hashTree>
+<TestAction guiclass="TestActionGui" testclass="TestAction" testname="Think time">
+      <intProp name="ActionProcessor.action">1</intProp>
+      <intProp name="ActionProcessor.target">0</intProp>
+      <stringProp name="ActionProcessor.duration">${__P(think_ms,500)}</stringProp>
+    </TestAction>
+<hashTree></hashTree>
+</hashTree>
+</hashTree>
+</hashTree>
+</jmeterTestPlan>

@@ -4,21 +4,35 @@ global:
 
 scrape_configs:
   # ---------------- applications ----------------
-  # Only the stack started by the active compose profile is up;
-  # the other targets are simply reported as down.
-  - job_name: monolith
-    metrics_path: /actuator/prometheus
-    static_configs:
-      - targets: ["ecommerce-mono:8080"]
-        labels:
-          architecture: monolith
-
-  - job_name: microservices
-    metrics_path: /actuator/prometheus
-    static_configs:
-      - targets: ["user-service:8081", "product-service:8082", "order-service:8083"]
-        labels:
-          architecture: microservices
+  # Docker service discovery: only RUNNING containers labelled prometheus.scrape=true
+  # are scraped, so the monitoring follows the active compose profile
+  # (monolith or microservices) and the stopped stack never shows up as "down".
+  - job_name: spring-boot
+    honor_labels: true   # keep the "application"/"architecture" tags set by the apps
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      - source_labels: [__meta_docker_container_label_prometheus_scrape]
+        regex: "true"
+        action: keep
+      # one target per container: keep only the published HTTP port
+      - source_labels: [__meta_docker_port_private, __meta_docker_container_label_prometheus_port]
+        regex: "(8080;8080|8081;8081|8082;8082|8083;8083)"
+        action: keep
+      - source_labels: [__meta_docker_network_ip, __meta_docker_container_label_prometheus_port]
+        separator: ":"
+        target_label: __address__
+      - source_labels: [__meta_docker_container_label_prometheus_path]
+        target_label: __metrics_path__
+      # job = architecture of the running profile ("monolith" / "microservices")
+      - source_labels: [__meta_docker_container_label_architecture]
+        target_label: job
+      - source_labels: [__meta_docker_container_label_architecture]
+        target_label: architecture
+      - source_labels: [__meta_docker_container_name]
+        regex: "/?(.*)"
+        target_label: container
 
   # ---------------- infrastructure ----------------
   - job_name: node-exporter

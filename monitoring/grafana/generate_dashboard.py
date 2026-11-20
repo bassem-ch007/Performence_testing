@@ -1,132 +1,246 @@
-"""Generates dashboards/architecture-comparison.json (run: python generate_dashboard.py)."""
+"""Generates the two Grafana dashboards (one per architecture / compose profile):
+    dashboards/monolith.json        -> "Monolith"
+    dashboards/microservices.json   -> "Microservices"
+Run:  python monitoring/grafana/generate_dashboard.py
+"""
 import json
 import pathlib
 
 PROM = {"type": "prometheus", "uid": "prometheus"}
 LOKI = {"type": "loki", "uid": "loki"}
-MS = "user-service|product-service|order-service"
-APP_FILTER = 'architecture=~"$architecture", uri!~"/actuator.*"'
-
-panels = []
-_id = 0
-_y = 0
+OUT = pathlib.Path(__file__).parent / "dashboards"
 
 
-def row(title):
-    global _id, _y
-    _id += 1
-    panels.append({"type": "row", "id": _id, "title": title, "collapsed": False,
-                   "gridPos": {"h": 1, "w": 24, "x": 0, "y": _y}, "panels": []})
-    _y += 1
+class Dashboard:
+    def __init__(self):
+        self.panels, self._id, self._y, self._x, self._h = [], 0, 0, 0, 0
+
+    def _pos(self, w, h):
+        if self._x + w > 24:
+            self._y += self._h
+            self._x, self._h = 0, 0
+        pos = {"h": h, "w": w, "x": self._x, "y": self._y}
+        self._x += w
+        self._h = max(self._h, h)
+        return pos
+
+    def _next_id(self):
+        self._id += 1
+        return self._id
+
+    def row(self, title):
+        if self._x:
+            self._y += self._h
+            self._x, self._h = 0, 0
+        self.panels.append({"type": "row", "id": self._next_id(), "title": title, "collapsed": False,
+                            "gridPos": {"h": 1, "w": 24, "x": 0, "y": self._y}, "panels": []})
+        self._y += 1
+
+    def stat(self, title, expr, unit="short", w=3, decimals=None, thresholds=None, desc=""):
+        steps = thresholds or [{"color": "green", "value": None}]
+        defaults = {"unit": unit, "thresholds": {"mode": "absolute", "steps": steps}}
+        if decimals is not None:
+            defaults["decimals"] = decimals
+        self.panels.append({
+            "type": "stat", "id": self._next_id(), "title": title, "description": desc, "datasource": PROM,
+            "gridPos": self._pos(w, 4),
+            "fieldConfig": {"defaults": defaults, "overrides": []},
+            "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False},
+                        "colorMode": "background", "graphMode": "area", "textMode": "value"},
+            "targets": [{"datasource": PROM, "refId": "A", "expr": expr, "instant": False}],
+        })
+
+    def ts(self, title, targets, unit="short", w=12, h=8, ds=PROM, desc="", stack=False):
+        custom = {"lineWidth": 2, "fillOpacity": 10}
+        if stack:
+            custom["stacking"] = {"mode": "normal", "group": "A"}
+        self.panels.append({
+            "type": "timeseries", "id": self._next_id(), "title": title, "description": desc, "datasource": ds,
+            "gridPos": self._pos(w, h),
+            "fieldConfig": {"defaults": {"unit": unit, "custom": custom}, "overrides": []},
+            "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"]},
+                        "tooltip": {"mode": "multi", "sort": "desc"}},
+            "targets": [dict(datasource=ds, refId=chr(65 + i), **t) for i, t in enumerate(targets)],
+        })
+
+    def logs(self, title, expr, h=12):
+        self.panels.append({
+            "type": "logs", "id": self._next_id(), "title": title, "datasource": LOKI, "gridPos": self._pos(24, h),
+            "options": {"showTime": True, "wrapLogMessage": True, "sortOrder": "Descending", "enableLogDetails": True},
+            "targets": [{"datasource": LOKI, "refId": "A", "expr": expr}],
+        })
 
 
-def ts(title, targets, unit="short", x=0, w=12, h=8, ds=PROM, desc=""):
-    global _id
-    _id += 1
-    panels.append({
-        "type": "timeseries", "id": _id, "title": title, "description": desc, "datasource": ds,
-        "gridPos": {"h": h, "w": w, "x": x, "y": _y},
-        "fieldConfig": {"defaults": {"unit": unit, "custom": {"lineWidth": 2, "fillOpacity": 10}}, "overrides": []},
-        "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"]},
-                    "tooltip": {"mode": "multi", "sort": "desc"}},
-        "targets": [dict(datasource=ds, refId=chr(65 + i), **t) for i, t in enumerate(targets)],
-    })
-
-
-def next_line(h=8):
-    global _y
-    _y += h
-
-
-def q(expr, legend):
+def q(expr, legend=""):
     return {"expr": expr, "legendFormat": legend}
 
 
-# ---------------------------------------------------------------- client side
-row("Load test (k6, client side) - comparable end-to-end numbers")
-ts("Throughput (requests/s)", [q("sum by (testid) (rate(k6_http_reqs_total[$__rate_interval]))", "{{testid}}")], "reqps", 0)
-ts("Latency p95 / p99", [q("max by (testid) (k6_http_req_duration_p95)", "{{testid}} p95"),
-                          q("max by (testid) (k6_http_req_duration_p99)", "{{testid}} p99")], "s", 12)
-next_line()
-ts("Error rate", [q("avg by (testid) (k6_http_req_failed_rate)", "{{testid}}")], "percentunit", 0, 8)
-ts("Virtual users", [q("sum by (testid) (k6_vus)", "{{testid}}")], "short", 8, 8)
-ts("p95 per endpoint", [q("max by (testid, name) (k6_http_req_duration_p95)", "{{testid}} {{name}}")], "s", 16, 8)
-next_line()
+def build(arch):
+    """arch: 'monolith' or 'microservices'"""
+    ms = arch == "microservices"
+    d = Dashboard()
+    # selectors
+    app = f'architecture="{arch}"' + (', application=~"$service"' if ms else "")
+    http = app + ', uri!~"/actuator.*"'
+    ctr = 'name=~"$service"' if ms else 'name="ecommerce-mono"'
+    by = "application" if ms else None          # per-service breakdown only for microservices
+    grp = f"{by}, " if by else ""
+    leg = "{{application}} " if by else ""
 
-# ---------------------------------------------------------------- server side
-row("Spring Boot (server side)")
-ts("HTTP requests/s per architecture",
-   [q(f'sum by (architecture) (rate(http_server_requests_seconds_count{{{APP_FILTER}}}[$__rate_interval]))', "{{architecture}}")], "reqps", 0)
-ts("HTTP p95 per architecture",
-   [q(f'histogram_quantile(0.95, sum by (le, architecture) (rate(http_server_requests_seconds_bucket{{{APP_FILTER}}}[$__rate_interval])))', "{{architecture}}")], "s", 12)
-next_line()
-ts("HTTP p95 per endpoint",
-   [q(f'histogram_quantile(0.95, sum by (le, application, method, uri) (rate(http_server_requests_seconds_bucket{{{APP_FILTER}}}[$__rate_interval])))', "{{application}} {{method}} {{uri}}")], "s", 0, 24, 9)
-next_line(9)
-ts("gRPC client calls/s (order-service -> user/product)",
-   [q('sum by (rpc_service, rpc_method) (rate(grpc_client_seconds_count[$__rate_interval]))', "{{rpc_service}}/{{rpc_method}}")], "reqps", 0,
-   desc="Extra network hops that only exist in the microservice architecture")
-ts("gRPC client p95",
-   [q('histogram_quantile(0.95, sum by (le, rpc_method) (rate(grpc_client_seconds_bucket[$__rate_interval])))', "{{rpc_method}}")], "s", 12)
-next_line()
-ts("HTTP 5xx/s", [q(f'sum by (application) (rate(http_server_requests_seconds_count{{{APP_FILTER}, status=~"5.."}}[$__rate_interval]))', "{{application}}")], "reqps", 0)
-ts("DB pool: active connections", [q('sum by (application) (hikaricp_connections_active{architecture=~"$architecture"})', "{{application}}"),
-                                    q('sum by (application) (hikaricp_connections_pending{architecture=~"$architecture"})', "{{application}} pending")], "short", 12)
-next_line()
+    def per(expr_inner, agg="sum"):
+        return f"{agg} by ({by}) ({expr_inner})" if by else f"{agg}({expr_inner})"
 
-# ---------------------------------------------------------------- resources
-row("Resources (cAdvisor / JVM / node-exporter)")
-ts("CPU per architecture (cores)",
-   [q('sum(rate(container_cpu_usage_seconds_total{name="ecommerce-mono"}[$__rate_interval]))', "monolith"),
-    q(f'sum(rate(container_cpu_usage_seconds_total{{name=~"{MS}"}}[$__rate_interval]))', "microservices (total)"),
-    q('sum(rate(container_cpu_usage_seconds_total{name="postgres_db"}[$__rate_interval]))', "postgres")], "short", 0)
-ts("Memory per architecture (working set)",
-   [q('sum(container_memory_working_set_bytes{name="ecommerce-mono"})', "monolith"),
-    q(f'sum(container_memory_working_set_bytes{{name=~"{MS}"}})', "microservices (total)"),
-    q('sum(container_memory_working_set_bytes{name="postgres_db"})', "postgres")], "bytes", 12)
-next_line()
-ts("CPU per container (cores)",
-   [q('sum by (name) (rate(container_cpu_usage_seconds_total{name=~"ecommerce-mono|' + MS + '"}[$__rate_interval]))', "{{name}}")], "short", 0)
-ts("JVM heap used", [q('sum by (application) (jvm_memory_used_bytes{area="heap", architecture=~"$architecture"})', "{{application}}")], "bytes", 12)
-next_line()
-ts("JVM GC pause time /s", [q('sum by (application) (rate(jvm_gc_pause_seconds_sum{architecture=~"$architecture"}[$__rate_interval]))', "{{application}}")], "s", 0)
-ts("Host CPU usage (node-exporter)", [q('1 - avg(rate(node_cpu_seconds_total{mode="idle"}[$__rate_interval]))', "host")], "percentunit", 12)
-next_line()
+    # ------------------------------------------------------------ overview
+    d.row("Overview")
+    if ms:
+        d.stat("Services up", f'sum(up{{job="microservices"}})', decimals=0, w=3,
+               thresholds=[{"color": "red", "value": None}, {"color": "orange", "value": 1}, {"color": "green", "value": 3}])
+    else:
+        d.stat("Status", 'max(up{job="monolith"})', decimals=0, w=3,
+               thresholds=[{"color": "red", "value": None}, {"color": "green", "value": 1}])
+    d.stat("Requests/s", f"sum(rate(http_server_requests_seconds_count{{{http}}}[$__rate_interval]))", "reqps", decimals=1)
+    d.stat("p95 latency", f"histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{{{http}}}[$__rate_interval])))",
+           "s", thresholds=[{"color": "green", "value": None}, {"color": "orange", "value": 0.2}, {"color": "red", "value": 1}])
+    d.stat("Error rate (5xx)",
+           f'(sum(rate(http_server_requests_seconds_count{{{http}, status=~"5.."}}[$__rate_interval])) or vector(0)) / sum(rate(http_server_requests_seconds_count{{{http}}}[$__rate_interval]))',
+           "percentunit", thresholds=[{"color": "green", "value": None}, {"color": "orange", "value": 0.01}, {"color": "red", "value": 0.05}])
+    d.stat("CPU (cores)", f"sum(rate(container_cpu_usage_seconds_total{{{ctr}}}[$__rate_interval]))", decimals=2)
+    d.stat("Memory (working set)", f"sum(container_memory_working_set_bytes{{{ctr}}})", "bytes")
+    d.stat("DB connections active", f"sum(hikaricp_connections_active{{{app}}})", decimals=0)
+    d.stat("Uptime", f"min(process_uptime_seconds{{{app}}})", "s")
 
-# ---------------------------------------------------------------- logs
-row("Logs (Fluent Bit -> Loki)")
-ts("Log lines/s per level",
-   [q('sum by (level) (rate({job="spring-boot", architecture=~"$architecture"}[1m]))', "{{level}}")], "short", 0, 24, 6, LOKI)
-next_line(6)
-_id += 1
-panels.append({"type": "logs", "id": _id, "title": "Application logs", "datasource": LOKI,
-               "gridPos": {"h": 12, "w": 24, "x": 0, "y": _y},
-               "options": {"showTime": True, "wrapLogMessage": True, "sortOrder": "Descending", "enableLogDetails": True},
-               "targets": [{"datasource": LOKI, "refId": "A",
-                            "expr": '{job="spring-boot", architecture=~"$architecture", level=~"$level"} | json | line_format "{{.container}} {{.level}} {{.logger_name}} - {{.message}}"'}]})
+    # ------------------------------------------------------------ HTTP
+    d.row("HTTP (REST API)")
+    d.ts("Requests/s per endpoint",
+         [q(f"sum by ({grp}method, uri) (rate(http_server_requests_seconds_count{{{http}}}[$__rate_interval]))", leg + "{{method}} {{uri}}")], "reqps")
+    d.ts("Latency percentiles (all endpoints)",
+         [q(f"histogram_quantile({p}, sum by (le) (rate(http_server_requests_seconds_bucket{{{http}}}[$__rate_interval])))", f"p{int(p * 100)}")
+          for p in (0.5, 0.95, 0.99)], "s")
+    d.ts("p95 latency per endpoint",
+         [q(f"histogram_quantile(0.95, sum by (le, {grp}method, uri) (rate(http_server_requests_seconds_bucket{{{http}}}[$__rate_interval])))", leg + "{{method}} {{uri}}")], "s")
+    d.ts("Responses per status",
+         [q(f"sum by ({grp}status) (rate(http_server_requests_seconds_count{{{http}}}[$__rate_interval]))", leg + "{{status}}")], "reqps", stack=True)
+    if ms:
+        d.ts("Requests/s per service", [q(f"sum by (application) (rate(http_server_requests_seconds_count{{{http}}}[$__rate_interval]))", "{{application}}")], "reqps")
+        d.ts("p95 latency per service",
+             [q(f"histogram_quantile(0.95, sum by (le, application) (rate(http_server_requests_seconds_bucket{{{http}}}[$__rate_interval])))", "{{application}}")], "s")
 
-dashboard = {
-    "uid": "architecture-comparison",
-    "title": "Monolith vs Microservices",
-    "tags": ["performance", "spring-boot"],
-    "timezone": "browser",
-    "schemaVersion": 41,
-    "version": 1,
-    "refresh": "5s",
-    "time": {"from": "now-30m", "to": "now"},
-    "templating": {"list": [
-        {"name": "architecture", "label": "Architecture", "type": "custom", "query": "monolith,microservices",
-         "includeAll": True, "multi": True, "allValue": ".*",
-         "current": {"text": ["All"], "value": ["$__all"]},
-         "options": []},
-        {"name": "level", "label": "Log level", "type": "custom", "query": "ERROR,WARN,INFO,DEBUG",
-         "includeAll": True, "multi": True, "allValue": ".*",
-         "current": {"text": ["All"], "value": ["$__all"]}, "options": []},
-    ]},
-    "panels": panels,
-}
+    # ------------------------------------------------------------ gRPC (microservices only)
+    if ms:
+        d.row("gRPC (service-to-service)")
+        d.ts("Client calls/s (order-service -> user/product)",
+             [q('sum by (net_peer_name, rpc_method, grpc_status_code) (rate(grpc_client_seconds_count{architecture="microservices"}[$__rate_interval]))',
+                "-> {{net_peer_name}} {{rpc_method}} {{grpc_status_code}}")], "reqps")
+        d.ts("Client latency (p50 / p95 / p99)",
+             [q(f'histogram_quantile({p}, sum by (le, rpc_method) (rate(grpc_client_seconds_bucket{{architecture="microservices"}}[$__rate_interval])))',
+                f"{{{{rpc_method}}}} p{int(p * 100)}") for p in (0.5, 0.95, 0.99)], "s",
+             desc="Network + remote processing time seen by order-service")
+        d.ts("Server calls/s",
+             [q('sum by (application, rpc_method) (rate(grpc_server_seconds_count{architecture="microservices"}[$__rate_interval]))', "{{application}} {{rpc_method}}")], "reqps")
+        d.ts("Server latency p95",
+             [q('histogram_quantile(0.95, sum by (le, application, rpc_method) (rate(grpc_server_seconds_bucket{architecture="microservices"}[$__rate_interval])))',
+                "{{application}} {{rpc_method}}")], "s", desc="Processing time inside user-service / product-service")
+        d.ts("gRPC errors/s",
+             [q('sum by (application, rpc_method, grpc_status_code) (rate(grpc_client_seconds_count{architecture="microservices", grpc_status_code!="OK"}[$__rate_interval]))',
+                "{{application}} {{rpc_method}} {{grpc_status_code}}"),
+              q('sum(rate(grpc_client_seconds_count{architecture="microservices", grpc_status_code!="OK"}[$__rate_interval])) or vector(0)', "total")],
+             "reqps", w=24, h=6)
 
-out = pathlib.Path(__file__).parent / "dashboards" / "architecture-comparison.json"
-out.parent.mkdir(parents=True, exist_ok=True)
-out.write_text(json.dumps(dashboard, indent=2), encoding="utf-8")
-print("wrote", out, len(panels), "panels")
+    # ------------------------------------------------------------ JVM
+    d.row("JVM")
+    d.ts("Heap used / max",
+         [q(per(f'jvm_memory_used_bytes{{{app}, area="heap"}}'), leg + "used"),
+          q(per(f'jvm_memory_max_bytes{{{app}, area="heap"}}'), leg + "max")], "bytes")
+    d.ts("Non-heap used", [q(per(f'jvm_memory_used_bytes{{{app}, area="nonheap"}}'), leg + "non-heap")], "bytes")
+    d.ts("GC pause time per second", [q(per(f"rate(jvm_gc_pause_seconds_sum{{{app}}}[$__rate_interval])"), leg + "gc")], "s")
+    d.ts("Process CPU usage (of the container CPUs)", [q(per(f"process_cpu_usage{{{app}}}", "max"), leg + "process")], "percentunit")
+    d.ts("Live threads", [q(per(f"jvm_threads_live_threads{{{app}}}"), leg + "threads")], "short")
+    d.ts("Classes loaded", [q(per(f"jvm_classes_loaded_classes{{{app}}}"), leg + "classes")], "short")
+
+    # ------------------------------------------------------------ database
+    d.row("Database connection pool (HikariCP)")
+    d.ts("Connections",
+         [q(per(f"hikaricp_connections_active{{{app}}}"), leg + "active"),
+          q(per(f"hikaricp_connections_idle{{{app}}}"), leg + "idle"),
+          q(per(f"hikaricp_connections_pending{{{app}}}"), leg + "pending"),
+          q(per(f"hikaricp_connections_max{{{app}}}"), leg + "max")], "short")
+    d.ts("Connection acquire / usage time (avg)",
+         [q(f"sum by ({by or 'pool'}) (rate(hikaricp_connections_acquire_seconds_sum{{{app}}}[$__rate_interval])) / sum by ({by or 'pool'}) (rate(hikaricp_connections_acquire_seconds_count{{{app}}}[$__rate_interval]))", leg + "acquire"),
+          q(f"sum by ({by or 'pool'}) (rate(hikaricp_connections_usage_seconds_sum{{{app}}}[$__rate_interval])) / sum by ({by or 'pool'}) (rate(hikaricp_connections_usage_seconds_count{{{app}}}[$__rate_interval]))", leg + "usage")], "s")
+
+    # ------------------------------------------------------------ container
+    d.row("Container resources (cAdvisor)")
+    cpu_leg = "{{name}}" if ms else "ecommerce-mono"
+    cpu_targets = [q(f"sum by (name) (rate(container_cpu_usage_seconds_total{{{ctr}}}[$__rate_interval]))", cpu_leg),
+                   q(f"sum by (name) (container_spec_cpu_quota{{{ctr}}} / container_spec_cpu_period{{{ctr}}})", cpu_leg + " limit")]
+    mem_targets = [q(f"sum by (name) (container_memory_working_set_bytes{{{ctr}}})", cpu_leg),
+                   q(f"sum by (name) (container_spec_memory_limit_bytes{{{ctr}}})", cpu_leg + " limit")]
+    if ms:
+        cpu_targets.append(q(f"sum(rate(container_cpu_usage_seconds_total{{{ctr}}}[$__rate_interval]))", "total (all services)"))
+        mem_targets.append(q(f"sum(container_memory_working_set_bytes{{{ctr}}})", "total (all services)"))
+    d.ts("CPU (cores) vs limit", cpu_targets, "short")
+    d.ts("Memory working set vs limit", mem_targets, "bytes")
+    d.ts("CPU throttling (s/s)", [q(f"sum by (name) (rate(container_cpu_cfs_throttled_seconds_total{{{ctr}}}[$__rate_interval]))", "{{name}}")], "s",
+         desc="Time the container wanted CPU but was capped by its limit: >0 means the CPU limit is the bottleneck")
+    d.ts("Network I/O",
+         [q(f"sum by (name) (rate(container_network_receive_bytes_total{{{ctr}}}[$__rate_interval]))", "{{name}} rx"),
+          q(f"-sum by (name) (rate(container_network_transmit_bytes_total{{{ctr}}}[$__rate_interval]))", "{{name}} tx")], "Bps")
+
+    # ------------------------------------------------------------ shared infrastructure
+    d.row("Shared infrastructure (PostgreSQL / host)")
+    d.ts("PostgreSQL CPU (cores)", [q('sum(rate(container_cpu_usage_seconds_total{name="postgres_db"}[$__rate_interval]))', "postgres")], "short", w=8)
+    d.ts("PostgreSQL memory", [q('sum(container_memory_working_set_bytes{name="postgres_db"})', "postgres")], "bytes", w=8)
+    d.ts("Host CPU / memory (node-exporter)",
+         [q('1 - avg(rate(node_cpu_seconds_total{mode="idle"}[$__rate_interval]))', "CPU"),
+          q("1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes", "memory")], "percentunit", w=8,
+         desc="Docker VM running all containers (and the load generator if it runs in Docker)")
+
+    # ------------------------------------------------------------ logs
+    d.row("Logs (Fluent Bit -> Loki)")
+    lsel = f'job="spring-boot", architecture="{arch}"' + (', container=~"$service"' if ms else "")
+    d.ts("Log lines/s per level", [q(f'sum by ({"container, " if ms else ""}level) (rate({{{lsel}}}[1m]))', ("{{container}} " if ms else "") + "{{level}}")],
+         "short", w=24, h=6, ds=LOKI)
+    d.logs("Application logs",
+           f'{{{lsel}, level=~"$level"}} |~ "$search" | json | line_format "{{{{.container}}}} {{{{.level}}}} {{{{.logger_name}}}} - {{{{.message}}}}"')
+
+    # ------------------------------------------------------------ variables
+    variables = []
+    if ms:
+        variables.append({
+            "name": "service", "label": "Service", "type": "custom",
+            "query": "user-service,product-service,order-service",
+            "includeAll": True, "multi": True, "allValue": "user-service|product-service|order-service",
+            "current": {"text": ["All"], "value": ["$__all"]}, "options": []})
+    variables += [
+        {"name": "level", "label": "Log level", "type": "custom", "query": "ERROR,WARN,INFO,DEBUG,UNKNOWN",
+         "includeAll": True, "multi": True, "allValue": ".*", "current": {"text": ["All"], "value": ["$__all"]}, "options": []},
+        {"name": "search", "label": "Log search", "type": "textbox", "query": "", "current": {"text": "", "value": ""}},
+    ]
+
+    title = "Microservices" if ms else "Monolith"
+    other = "monolith" if ms else "microservices"
+    return {
+        "uid": arch,
+        "title": title,
+        "description": f"Monitoring of the {arch} profile (docker compose --profile {arch})",
+        "tags": ["performance", "spring-boot", arch],
+        "timezone": "browser",
+        "schemaVersion": 41,
+        "version": 1,
+        "refresh": "5s",
+        "time": {"from": "now-15m", "to": "now"},
+        "links": [{"title": f"Open the {other.capitalize()} dashboard", "type": "link", "url": f"/d/{other}", "icon": "dashboard"}],
+        "templating": {"list": variables},
+        "panels": d.panels,
+    }
+
+
+if __name__ == "__main__":
+    OUT.mkdir(parents=True, exist_ok=True)
+    old = OUT / "architecture-comparison.json"
+    if old.exists():
+        old.unlink()
+    for arch in ("monolith", "microservices"):
+        dash = build(arch)
+        (OUT / f"{arch}.json").write_text(json.dumps(dash, indent=2), encoding="utf-8")
+        print(f"wrote {arch}.json ({len(dash['panels'])} panels)")
