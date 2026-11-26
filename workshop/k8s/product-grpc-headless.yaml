@@ -1,0 +1,19 @@
+# DNS publishes ready pod IPs individually for gRPC client-side round-robin.
+# Apply alongside the normal product-service ClusterIP Service, not instead of it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: product-service-grpc-headless
+  labels:
+    app: product-service
+    workshop: grpc-balancing
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: false
+  selector:
+    app: product-service
+  ports:
+    - name: grpc
+      port: 9092
+      targetPort: 9092
+      protocol: TCP
