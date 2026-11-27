@@ -130,9 +130,8 @@ case "$stage" in
     assert_replicas user-service 1
     assert_replicas order-service 1
     assert_replicas product-service 3
-    [[ "$(getimage order-service)" != "$baseline_order" ]] || { echo "Stage 05 requires corrected order-service; run Stage 04 first" >&2; exit 1; }
-    currenttarget="$(kubectl -n "$ns" get deployment order-service -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="PRODUCT_GRPC_TARGET")].value}')"
-    [[ "$currenttarget" == "$corrected_target" ]] || { echo "Order gRPC headless target not active; run Stage 04 first" >&2; exit 1; }
+    # Stage 05 is independent of Stage 04; either baseline or corrected
+    # order-service is acceptable as long as it is available.
     ready product-service
     ready order-service
     health product-service 8082
@@ -146,7 +145,6 @@ case "$stage" in
     assert_replicas user-service 1
     assert_replicas order-service 1
     assert_replicas product-service 3
-    [[ "$(getimage order-service)" != "$baseline_order" ]] || { echo "Run Stage 04 before Stage 05" >&2; exit 1; }
     ready product-service
     ready order-service
     kubectl -n "$ns" patch deployment product-service --type=strategic -p '{"spec":{"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxSurge":1,"maxUnavailable":0}}}}'
