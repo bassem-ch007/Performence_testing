@@ -80,6 +80,17 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Refuse overwriting an existing release tag
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          set -euo pipefail
+          IMAGE="bassem00/$IMAGE_REPO:$IMAGE_TAG"
+          if docker buildx imagetools inspect "$IMAGE" >/dev/null 2>&1; then
+            echo "::error::Release tag $IMAGE already exists. Select a new unused version."
+            exit 1
+          fi
+
       - name: Build and publish prebuilt runtime image
         uses: docker/build-push-action@v6
         with:
