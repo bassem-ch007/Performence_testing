@@ -7,7 +7,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 41,
-  "version": 2,
+  "version": 3,
   "refresh": "5s",
   "time": {
     "from": "now-15m",
@@ -131,8 +131,8 @@
     {
       "id": 4,
       "type": "timeseries",
-      "title": "HTTP 5xx errors per second by application",
-      "description": "Server-side HTTP 5xx counts. Client-side timeouts may not appear.",
+      "title": "HTTP 4xx/5xx/6xx errors per second by application",
+      "description": "Server-observed HTTP 4xx, 5xx and nonstandard 6xx responses. Client timeouts/refusals cannot appear here; analyze JMeter JTL for those.",
       "gridPos": {
         "x": 12,
         "y": 8,
@@ -146,7 +146,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (application) (rate(http_server_requests_seconds_count{namespace=\"staging\",status=~\"5..\",uri!~\"/actuator.*\"}[1m]))",
+          "expr": "sum by (application) (rate(http_server_requests_seconds_count{namespace=\"staging\",status=~\"[456]..\",uri!~\"/actuator.*\"}[1m]))",
           "legendFormat": "{{application}}"
         }
       ],
@@ -165,7 +165,83 @@
           "placement": "bottom"
         }
       }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "HTTP 4xx / 5xx / 6xx by status (req/s)",
+      "description": "Server responses grouped by exact status; 6xx is nonstandard, and network errors are client-only.",
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application,status) (rate(http_server_requests_seconds_count{namespace=\"staging\",uri!~\"/actuator.*\",status=~\"[456]..\"}[1m]))",
+          "legendFormat": "{{application}} HTTP {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "HTTP 4xx+ error percentage — server observed",
+      "description": "4xx/5xx/nonstandard 6xx responses divided by server-handled HTTP traffic; does NOT include JMeter client failures. Empty when no traffic.",
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * ((sum(rate(http_server_requests_seconds_count{namespace=\"staging\",uri!~\"/actuator.*\",status=~\"[456]..\"}[1m]))) or (0 * sum(rate(http_server_requests_seconds_count{namespace=\"staging\",uri!~\"/actuator.*\"}[1m])))) / clamp_min(sum(rate(http_server_requests_seconds_count{namespace=\"staging\",uri!~\"/actuator.*\"}[1m])),0.001)",
+          "legendFormat": "HTTP 4xx+/total"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
     }
   ],
-  "description": "Observe whether the applications are healthy and how load changes resource demand."
+  "description": "Observe whether the applications are healthy and how load changes resource demand. Server-side error panels now include 4xx, 5xx and nonstandard 6xx; use JMeter JTL for transport and assertion failures."
 }
