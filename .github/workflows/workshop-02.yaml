@@ -1,0 +1,12 @@
+# Stop monolith, restore original order/product images and start all three microservices.
+name: "02 · Microservices — load & spike"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  stage:
+    uses: ./.github/workflows/workshop-stage-engine.yaml
+    with:
+      stage: "02"
+    secrets: inherit
