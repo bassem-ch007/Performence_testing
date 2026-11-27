@@ -10,23 +10,21 @@ This folder replaces the earlier minimal monitoring scaffold. Deployment is mana
 
 Resource limits per tool are conservative initial ceilings; validate during actual high load. This monitoring is not HA. Public NodePorts are managed separately in `k8s/workshop-access/monitoring-nodeports.yaml` (Grafana 30300 and Prometheus 30090). These components' base Services remain ClusterIP. Keep Loki and Fluent Bit internal.
 
-## Deploy (on Azure VM)
+## Refresh monitoring dashboards safely (on Azure VM)
+
+The Kubernetes applications are already deployed. Update **only** the monitoring namespace to avoid resetting application replicas:
+
 ```bash
+cd ~/Performence_testing
 git pull --ff-only origin main
-kubectl get secret grafana-admin -n monitoring || true
-read -rsp "Grafana password: " GRAFANA_PASSWORD; echo
-kubectl -n monitoring create secret generic grafana-admin --from-literal=password="$GRAFANA_PASSWORD"
-unset GRAFANA_PASSWORD
-kubectl kustomize k8s/base/monitoring >/tmp/workshop-monitoring-rendered.yaml
+export KUBECONFIG="$HOME/.kube/config"
 kubectl apply --dry-run=server -k k8s/base/monitoring
-kubectl apply -k k8s/overlays/azure
-kubectl -n monitoring rollout status deployment/prometheus --timeout=240s
+kubectl apply -k k8s/base/monitoring
 kubectl -n monitoring rollout status deployment/grafana --timeout=240s
-kubectl -n monitoring rollout status deployment/loki --timeout=240s
-kubectl -n monitoring rollout status daemonset/fluent-bit --timeout=240s
-kubectl -n monitoring get pods,svc,pvc
+kubectl -n monitoring get pods
 ```
-Create the Secret only once; if it exists, don't run `create` again. The Secret's password is not stored in Git. Use separate shell sessions for local forward commands.
+
+The `grafana-admin` Secret already exists on the workshop cluster; do **not** recreate it or reset passwords during the class. If provisioned panels do not reload automatically from ConfigMap, check provider file reload or restart only Grafana using `kubectl -n monitoring rollout restart deployment/grafana`. Never reapply the full Azure overlay during an active workshop, because its staging manifests specify zero replicas.
 
 ## Private web access
 On Azure VM: `kubectl -n monitoring port-forward svc/grafana 3000:3000 --address 127.0.0.1`
