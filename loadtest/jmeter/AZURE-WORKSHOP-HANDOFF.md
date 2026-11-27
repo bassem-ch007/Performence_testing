@@ -98,6 +98,21 @@ Monitoring web endpoints use **different NodePorts** from the applications; depl
 
 Grafana administrator credentials must not be committed or shared broadly. For participants, create a **Viewer** account in Grafana with a distinct password and no administrative privileges; optionally assign a dedicated instructor/admin account. Grafana's configured Prometheus and Loki datasources use internal Kubernetes DNS, so public Loki access is unnecessary. Exposed monitoring APIs can reveal cluster metadata and logs; restrict/disable the Azure NSG rules outside the supervised session.
 
+### Grafana dashboards by workshop stage
+
+All six dashboards are provisioned in Grafana's **Performance workshop** folder. The monolith (44 panels) and microservices (52 panels) dashboards preserve and adapt the collaborator's original detailed dashboards.
+
+| Stage | Dashboard | What to examine |
+| --- | --- | --- |
+| All stages | Workshop · K3s live overview | CPU/memory, RPS, latency, logs across the cluster |
+| 1 Monolith baseline/spike | Workshop · 01 Monolith — load and spike | Throughput, p95/p99 latency, errors, HikariCP, JVM, container pressure |
+| 2 Microservices baseline/spike | Workshop · 02 Microservices — load and gRPC | Per-service HTTP, gRPC, JVM/DB pools, service CPU, logs |
+| 3 Manual product replica scaling | Workshop · 03 Manual scaling & gRPC correction | Pod CPU, direct HTTP and gRPC request rates separately |
+| 4 Corrected order-service deployment | Workshop · 04 gRPC client correction — before / after | Three product pods, gRPC call shares per pod, client errors, same load profile |
+| 5 Product rolling update | Workshop · 05 Rolling update & availability | Healthy scrape targets, pod replacement, response latency, HTTP errors |
+
+Do not declare one product pod dominates until direct per-pod gRPC data under sufficient traffic supports it. For A/B tests, retain identical JMeter settings and choose equivalent time ranges. Grafana's pod availability series counts responding Prometheus scrape targets; verify actual Kubernetes image versions and deployment status separately. See `k8s/base/monitoring/README.md` for panel caveats.
+
 ## Observability & workshop sequence
 Prometheus scrapes `/actuator/prometheus` on staging application pods; Grafana dashboards cover pod CPU, memory, HTTP and product-pod completed gRPC request counters (`grpc_server_seconds_count`). Always separate **direct product HTTP traffic** from **order-service → product-service gRPC** when interpreting replica distribution. The experiment is manual scaling 1 → 3 product pods on original order-service client, then deploying a separately built fixed order-service with DNS headless round-robin and re-running the **same** load. CI already builds/publishes versioned Docker Hub images; CD for prebuilt corrected order-service and product-service rolling update are pending.
 
