@@ -89,6 +89,8 @@ case "$stage" in
     ready product-service
     ready order-service
     ready user-service
+    [[ "$(getimage order-service)" == "$baseline_order" ]] || { echo "Stage 04 requires baseline order-service; run Stage 02 then 03" >&2; exit 1; }
+    [[ "$(getimage product-service)" == "$baseline_product" ]] || { echo "Stage 04 requires baseline product-service; run Stage 02 then 03" >&2; exit 1; }
     kubectl -n "$ns" get svc product-service-grpc-headless >/dev/null
     before="$(getimage order-service)"
     oldtarget="$(kubectl -n "$ns" get deployment order-service -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="PRODUCT_GRPC_TARGET")].value}')"
@@ -119,6 +121,9 @@ case "$stage" in
     assert_replicas user-service 1
     assert_replicas order-service 1
     assert_replicas product-service 3
+    [[ "$(getimage order-service)" != "$baseline_order" ]] || { echo "Stage 05 requires corrected order-service; run Stage 04 first" >&2; exit 1; }
+    currenttarget="$(kubectl -n "$ns" get deployment order-service -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="PRODUCT_GRPC_TARGET")].value}')"
+    [[ "$currenttarget" == "$corrected_target" ]] || { echo "Order gRPC headless target not active; run Stage 04 first" >&2; exit 1; }
     ready product-service
     ready order-service
     health product-service 8082
@@ -132,6 +137,7 @@ case "$stage" in
     assert_replicas user-service 1
     assert_replicas order-service 1
     assert_replicas product-service 3
+    [[ "$(getimage order-service)" != "$baseline_order" ]] || { echo "Run Stage 04 before Stage 05" >&2; exit 1; }
     ready product-service
     ready order-service
     kubectl -n "$ns" patch deployment product-service --type=strategic -p '{"spec":{"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxSurge":1,"maxUnavailable":0}}}}'
