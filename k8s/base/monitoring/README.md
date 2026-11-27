@@ -4,7 +4,7 @@ This folder replaces the earlier minimal monitoring scaffold. Deployment is mana
 
 ## Components and isolation
 - Prometheus v3.5.0: gathers Kubernetes-staging annotated Spring `/actuator/prometheus` endpoints and kubelet cAdvisor pod/container CPU+memory metrics through Kubernetes API. Kubernetes RBAC is read-only. Retention 3 days.
-- Grafana 12.1.0: six stage-specific workshop dashboards (31 panels total) using Prometheus. The collaborator's original detailed dashboards remain available as reference in their repository.
+- Grafana 12.1.0: six stage-specific workshop dashboards (34 panels total) using Prometheus. The collaborator's original detailed dashboards remain available as reference in their repository.
 - Loki 3.5.3 + Fluent Bit 4.0.5 DaemonSet: central pod log aggregation using host `/var/log/containers` and Kubernetes labels; keep internal.
 - Persistent PVCs in `monitoring`: Prometheus 3Gi, Grafana 1Gi, Loki 2Gi. On a single local-path node with ReclaimPolicy Delete. The database in `data` is unchanged.
 
@@ -40,6 +40,12 @@ Dashboard Stage 03 uses **six panels only**: healthy observed product targets, r
 The previous Stage 03 HTTP per-pod error cards all showed zero even though JMeter had failures; these panels have been **removed**. The server-side product metric only sees its own HTTP responses, not JMeter transport failures, gRPC failures, or failures returned by order-service. Read **JMeter CSV JTL** (use `loadtest/jmeter/analyze-jtl.py`) for actual client-visible failure labels/codes, including nonnumeric synthetic failures. Never equate HTTP 4xx/5xx counters with gRPC failure rates.
 
 For before/after comparison, run the **same controlled order-heavy traffic** with Stage 03 and Stage 04. Choose the same time window in Grafana and collect JTL stats; do not mix a 2,550-user overload spike with a low-user correction run and claim improvement solely due to the code change.
+
+## Stage 04 — directly comparable gRPC correction dashboard
+
+Stage 04 now mirrors the **exact same six panels, query expressions, units, positions and time settings** as Stage 03. The only dashboard differences are the title and experiment description. Compare Stage 03 `order-service:1.0.0` with Stage 04 corrected `order-service:1.1.0` using the **same JMeter scenario, concurrency, ramp, seed volumes and a matching analysis interval**. Check the order-service image and `PRODUCT_GRPC_TARGET=dns:///product-service-grpc-headless:9092`; the dashboard itself cannot establish which order-service version produced a historical timeseries. Do not view both dashboards at the same current time and interpret them as separate independent runs, since both query the same Prometheus data.
+
+Expected *hypothesis*: per-pod gRPC distribution may become less concentrated with headless DNS and round-robin. Three replicas do not guarantee exactly one third each and the fix is not proven until measured. The REST panels can provide a control comparison. JMeter is the source for end-to-end errors under stress, even when server-side HTTP error counters read zero.
 
 ## JMeter metrics
 JMeter test results remain on the participant machines as JTL/HTML reports. The current JMX plans are not wired to InfluxDB, and InfluxDB is intentionally **not part of this workshop cluster**. Grafana displays Spring Boot, Kubernetes and pod metrics via Prometheus and log events via Loki. Do not add an InfluxDB Backend Listener to JMX files.
