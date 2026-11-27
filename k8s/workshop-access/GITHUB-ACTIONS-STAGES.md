@@ -47,3 +47,15 @@ All workflows report status in GitHub Actions. Before running each load test, wa
 - The correction image is **not yet confirmed published**, and GitHub SSH access from hosted runners has **not yet been tested**. These workflows are committed configuration, not evidence of successful live execution.
 - The 05 HTTP monitor checks only `/actuator/health` for product, not a complete shopping transaction or the order gRPC path; a separate JMeter run supplies end-to-end evidence.
 - This GitHub workflow engine uses SSH from Actions to your VM. If you want to avoid making TCP/22 publicly reachable from GitHub-hosted runners, run a GitHub **self-hosted runner** on the VM under a restricted account and adapt the engine to call `kubectl` locally (outbound-only GitHub connection).
+
+## Safety audit after successful Stage 01 (27 Nov 2026)
+The monolith is running 1/1, while user/product/order remain scaled 0/0 (verified by instructor from Azure). The following safeguards were added to `main` **after** Stage 01:
+- Every stage uses the readable user kubeconfig `~/.kube/config` in noninteractive SSH.
+- Stage 02 checks database readiness, staging Secret, all three Deployments and Services **before** switching off the monolith; it restores baseline order/product image, gRPC target, and one replica each.
+- Stage 03 requires 1 ready microservice replica each, baseline images, and the baseline gRPC target before scaling product-service to 3.
+- Stage 04 requires the correct original image baseline and healthy 3-product-replica topology. It updates the order image and gRPC target together, then restores the prior image and *both* gRPC settings if the rollout or health check fails.
+- Stage 05 now executes a read-only **05-preflight** job before any Docker image is built. The build is skipped unless 3 healthy product replicas and the corrected order-service are ready. After CI, CD monitors public HTTP health during the rolling update and restores the previous product image if the rollout fails.
+- Health availability polling is **HTTP /actuator/health only**, at roughly one probe per second during the rollout; it does not prove zero failed JMeter transactions or successful gRPC behavior. Compare the JMeter JTL and Grafana panels.
+- There are still no verified live results for stages 02–05; do not claim the workflows are fully validated until each succeeds.
+
+**Operational note:** Stage 02 involves an intentional architecture cutover, not zero downtime. The preflight reduces avoidable errors but cannot guarantee an automatic switchback if pods fail to start after monolith is stopped. Stage 04 needs the prepublished fixed order-service image; Stage 05 still needs the Docker Hub credentials and a new unused product-service image tag.
