@@ -99,7 +99,7 @@ jobs:
         run: |
           {
             echo "### Published Docker Hub image"
-            echo "`bassem00/$IMAGE_REPO:${{ inputs.image_tag }}`"
-            echo "Source commit: `$SOURCE_SHA`"
+            echo "Image: bassem00/$IMAGE_REPO:${{ inputs.image_tag }}"
+            echo "Source commit: $SOURCE_SHA"
             echo "This workflow builds and pushes only; it never deploys."
           } >> "$GITHUB_STEP_SUMMARY"
