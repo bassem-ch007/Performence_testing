@@ -1,7 +1,7 @@
 {
   "uid": "workshop-microservices",
   "title": "Workshop · 02 · Microservices — load & spike",
-  "description": "Workshop microservices performance and causality: compare HTTP throughput, p95/p99 and errors across user/product/order, then inspect gRPC latency on order-service client and receiving services. Elevated gRPC latency is a hypothesis to verify, not an automatic diagnosis.",
+  "description": "Workshop microservices performance and causality: compare HTTP throughput, p95/p99 and errors across user/product/order, then inspect gRPC latency on order-service client and receiving services. Elevated gRPC latency is a hypothesis to verify, not an automatic diagnosis. Server-side error panels now include 4xx, 5xx and nonstandard 6xx; use JMeter JTL for transport and assertion failures.",
   "tags": [
     "performance",
     "spring-boot",
@@ -12,7 +12,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 41,
-  "version": 4,
+  "version": 5,
   "refresh": "5s",
   "time": {
     "from": "now-15m",
@@ -270,8 +270,8 @@
     {
       "id": 6,
       "type": "timeseries",
-      "title": "HTTP 5xx error rate by service (%)",
-      "description": "Displays 0% for every active service with no 5xx responses, rather than an empty panel.",
+      "title": "HTTP 4xx/5xx/6xx error rate by service (%)",
+      "description": "Server-observed HTTP 4xx, 5xx and nonstandard 6xx responses. Client timeouts/refusals cannot appear here; analyze JMeter JTL for those.",
       "gridPos": {
         "x": 12,
         "y": 16,
@@ -285,7 +285,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "100 * ((sum by (application) (rate(http_server_requests_seconds_count{namespace=\"staging\",uri!~\"/actuator.*\",architecture=\"microservices\",status=~\"5..\"}[1m]))) or on (application) (0 * sum by (application) (rate(http_server_requests_seconds_count{namespace=\"staging\",uri!~\"/actuator.*\",architecture=\"microservices\"}[1m])))) / clamp_min(sum by (application) (rate(http_server_requests_seconds_count{namespace=\"staging\",uri!~\"/actuator.*\",architecture=\"microservices\"}[1m])), 0.001)",
+          "expr": "100 * ((sum by (application) (rate(http_server_requests_seconds_count{namespace=\"staging\",uri!~\"/actuator.*\",architecture=\"microservices\",status=~\"[456]..\"}[1m]))) or on (application) (0 * sum by (application) (rate(http_server_requests_seconds_count{namespace=\"staging\",uri!~\"/actuator.*\",architecture=\"microservices\"}[1m])))) / clamp_min(sum by (application) (rate(http_server_requests_seconds_count{namespace=\"staging\",uri!~\"/actuator.*\",architecture=\"microservices\"}[1m])), 0.001)",
           "legendFormat": "{{application}}"
         }
       ],
@@ -444,6 +444,82 @@
       "fieldConfig": {
         "defaults": {
           "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "HTTP 4xx / 5xx / 6xx by status (req/s)",
+      "description": "Server responses grouped by exact status; 6xx is nonstandard, and network errors are client-only.",
+      "gridPos": {
+        "x": 0,
+        "y": 40,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application,status) (rate(http_server_requests_seconds_count{namespace=\"staging\",uri!~\"/actuator.*\",architecture=\"microservices\",status=~\"[456]..\"}[1m]))",
+          "legendFormat": "{{application}} HTTP {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "HTTP 4xx+ error percentage — server observed",
+      "description": "4xx/5xx/nonstandard 6xx responses divided by server-handled HTTP traffic; does NOT include JMeter client failures. Empty when no traffic.",
+      "gridPos": {
+        "x": 12,
+        "y": 40,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * ((sum(rate(http_server_requests_seconds_count{namespace=\"staging\",uri!~\"/actuator.*\",architecture=\"microservices\",status=~\"[456]..\"}[1m]))) or (0 * sum(rate(http_server_requests_seconds_count{namespace=\"staging\",uri!~\"/actuator.*\",architecture=\"microservices\"}[1m])))) / clamp_min(sum(rate(http_server_requests_seconds_count{namespace=\"staging\",uri!~\"/actuator.*\",architecture=\"microservices\"}[1m])),0.001)",
+          "legendFormat": "HTTP 4xx+/total"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
         },
         "overrides": []
       },
