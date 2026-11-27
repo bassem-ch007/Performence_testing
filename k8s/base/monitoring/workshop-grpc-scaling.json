@@ -537,14 +537,16 @@
         },
         "definition": "label_values(up{job=\"spring-boot-staging\",application=\"product-service\",namespace=\"staging\"},pod)",
         "multi": true,
-        "includeAll": false,
+        "includeAll": true,
         "sort": 1,
         "hide": 2,
         "current": {
           "text": "All",
-          "value": "$__all"
+          "value": "$__all",
+          "selected": true
         },
-        "options": []
+        "options": [],
+        "allValue": ".*"
       }
     ]
   }
