@@ -143,7 +143,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{namespace=\"staging\"}"
+          "expr": "{job=\"fluent-bit\"}"
         }
       ],
       "options": {
