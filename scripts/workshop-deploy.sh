@@ -2,6 +2,13 @@
 # Azure k3s staging deploy; updates ONLY one existing deployment.
 # Usage: bash scripts/workshop-deploy.sh order-service 1.1.0
 set -Eeuo pipefail
+# k3s kubectl defaults to the root-owned /etc/rancher/k3s/k3s.yaml even
+# for noninteractive SSH sessions; use the per-user kubeconfig instead.
+export KUBECONFIG="${HOME}/.kube/config"
+if [[ ! -r "$KUBECONFIG" ]]; then
+  echo "Kubernetes config is missing or unreadable: $KUBECONFIG" >&2
+  exit 1
+fi
 if [[ $# -ne 2 ]]; then echo "Usage: $0 {monolith|user-service|product-service|order-service} SEMVER" >&2; exit 2; fi
 service="$1"; tag="$2"
 if [[ ! "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo "Invalid semver tag: $tag" >&2; exit 2; fi
