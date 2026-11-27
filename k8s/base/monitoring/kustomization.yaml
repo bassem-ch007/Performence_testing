@@ -17,7 +17,12 @@ configMapGenerator:
     files: [dashboards-provider.yaml]
   - name: grafana-dashboards
     namespace: monitoring
-    files: [workshop-overview.json]
+    files:
+      - workshop-overview.json
+      - workshop-monolith.json
+      - workshop-microservices.json
+      - workshop-grpc-scaling.json
+      - workshop-rollout.json
   - name: loki-config
     namespace: monitoring
     files: [loki-config.yaml]
