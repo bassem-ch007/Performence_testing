@@ -33,13 +33,17 @@ Then visit http://127.0.0.1:3000 on your laptop. No Azure NSG public rule requir
 
 ## Stage 03 — per-pod gRPC distribution diagnosis
 
-The Stage 03 dashboard now has numeric healthy/discovered pod counts, gRPC calls per pod, per-pod gRPC share (%), direct REST calls per pod, server-observed HTTP 4xx/5xx/6xx errors by pod/status, and CPU per pod. The bottom sections dynamically **repeat one traffic panel and one HTTP-error count panel for every discovered product-service pod**, rather than assuming any specific pod names or indices.
+Stage 03 shows the number of live product-service Prometheus scrape targets, completed gRPC traffic per pod (calls/s and share %), direct HTTP calls per pod, and CPU per pod. One traffic comparison panel is automatically repeated for each current **healthy** product pod. Historical pods from a previous rollout must not appear as separate error tiles.
 
-**Baseline experiment:** run Stage 03 (baseline order-service `1.0.0`, `PRODUCT_GRPC_TARGET=product-service:9092`, `GRPC_LOAD_BALANCING_POLICY=pick_first`, product replicas 3). Drive **order-service API** traffic (cart/order operations) under sustained load; this triggers order → product gRPC. If only browsing direct product REST APIs, per-pod HTTP may be balanced while gRPC counters remain low, proving nothing about the gRPC defect. Look for three product pods present, but one pod receiving most gRPC completed calls; compare with direct HTTP distribution. A balanced target is **approximately** 33% each under adequate load, not an expected exact value.
+The gRPC share chart uses `scalar(sum(rate(...)))` as the denominator, avoiding the previous label-matching error where percentages showed **No data** despite active traffic. Only assess the chart when gRPC calls are actually flowing.
 
-**Error instrumentation limit:** per-pod HTTP error panels count `http_server_requests_seconds_count` with `status=~"[456].."` and do **not** represent unsuccessful gRPC statuses. Completed gRPC call counters do not by themselves distinguish success from failure, and a client network timeout may never reach the receiving pod. Use the JMeter CSV JTL analyzer and order-service logs/metrics for failures, and inspect `grpc_server_seconds_count` label sets via Prometheus before introducing any gRPC error-by-code query. Do not label HTTP error counts as gRPC errors.
+**Do not interpret HTTP zero failures as a successful JMeter test.** Product HTTP metrics cannot report failed client-side requests, non-HTTP timeouts, assertion failures, errors within order/user services, or failed gRPC calls as product HTTP errors. For the source of truth, retain the JTL and run:
 
-**Safe dashboard refresh:** run `kubectl apply -k k8s/base/monitoring` (not `k8s/overlays/azure`) after pulling `main`; Grafana may need `kubectl -n monitoring rollout restart deployment/grafana` for new ConfigMap-mounted dashboards to appear. Confirm that the product pod auto-variable discovers three pods while stage 03 runs.
+```bash
+python3 loadtest/jmeter/analyze-jtl.py /path/to/results.jtl
+```
+
+A JMeter run showing a high `Err` count is a failed load-test outcome **even when product HTTP status counters are zero**. The Stage 03 dashboard now explains this explicitly instead of repeating four misleading zero-count panels. It does not ingest JMeter statistics into Prometheus automatically. Compare Stage 03 (old order-service with gRPC `pick_first`) with Stage 04 (headless gRPC with `round_robin`) under an identical, preferably controlled order-heavy workload; a massive spike is useful to examine breaking points but introduces saturation effects.
 
 ## JMeter metrics
 JMeter test results remain on the participant machines as JTL/HTML reports. The current JMX plans are not wired to InfluxDB, and InfluxDB is intentionally **not part of this workshop cluster**. Grafana displays Spring Boot, Kubernetes and pod metrics via Prometheus and log events via Loki. Do not add an InfluxDB Backend Listener to JMX files.
