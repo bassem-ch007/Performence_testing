@@ -1,6 +1,6 @@
 {
   "uid": "workshop-grpc-scaling",
-  "title": "Workshop · 03 Manual scaling & gRPC correction",
+  "title": "Workshop · 03 Manual scaling — replicas & distribution",
   "description": "One to three product replicas; compare identical load before/after corrected order-service. CPU is supporting evidence; gRPC counter rates show which backend handled completed calls.",
   "tags": [
     "workshop",
