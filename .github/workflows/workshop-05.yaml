@@ -1,0 +1,75 @@
+# Build a new product-service image, deploy it with rolling update, and
+# probe its public HTTP endpoint continuously during rollout.
+name: "05 · Rolling update — CI/CD and availability"
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "New UNUSED semver tag (e.g. 1.1.1). Never overwrite 1.0.0"
+        required: true
+        type: string
+      source_ref:
+        description: "Product-service source branch, tag or commit SHA"
+        required: true
+        type: string
+        default: main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: "05a · CI — build and publish product-service"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate image tag
+        env:
+          TAG: ${{ inputs.image_tag }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "$TAG" != "1.0.0" ]] || {
+            echo "::error::Use a new semver tag other than baseline 1.0.0"
+            exit 1
+          }
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+          persist-credentials: false
+      - name: Print source commit
+        run: echo "Product source commit $(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Refuse overwriting a previously published tag
+        env:
+          TAG: ${{ inputs.image_tag }}
+        run: |
+          set -euo pipefail
+          if docker buildx imagetools inspect "bassem00/perf-product-service:$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG already exists. Choose a new version."
+            exit 1
+          fi
+      - name: Build and push product-service image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./product-service
+          platforms: linux/amd64
+          push: true
+          tags: bassem00/perf-product-service:${{ inputs.image_tag }}
+          cache-from: type=gha,scope=product-service
+          cache-to: type=gha,mode=max,scope=product-service
+      - name: CI summary
+        env:
+          TAG: ${{ inputs.image_tag }}
+        run: echo "Published bassem00/perf-product-service:$TAG" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: "05b · CD — rolling deploy with HTTP checks"
+    needs: build
+    uses: ./.github/workflows/workshop-stage-engine.yaml
+    with:
+      stage: "05"
+      image_tag: ${{ inputs.image_tag }}
+    secrets: inherit
