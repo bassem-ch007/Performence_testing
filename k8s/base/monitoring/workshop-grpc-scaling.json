@@ -1,7 +1,7 @@
 {
   "uid": "workshop-grpc-scaling",
-  "title": "Workshop · 03 · Manual scaling — replicas & gRPC",
-  "description": "Scale product-service from one to three pods. This view measures distribution rather than assuming a particular pod becomes dominant.",
+  "title": "Workshop · 03 · Replica distribution — baseline gRPC",
+  "description": "Dedicated numeric pod counts, one panel automatically repeated for EACH product pod, gRPC request distribution and HTTP errors. Contrast gRPC with direct HTTP: old order-service may pin gRPC to a single product pod while HTTP is balanced. Verify with sustained order traffic; no conclusion is assumed.",
   "tags": [
     "workshop",
     "k3s",
@@ -9,7 +9,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 41,
-  "version": 2,
+  "version": 3,
   "refresh": "5s",
   "time": {
     "from": "now-15m",
@@ -18,14 +18,14 @@
   "panels": [
     {
       "id": 1,
-      "type": "timeseries",
-      "title": "Healthy product-service targets",
-      "description": "Healthy Prometheus targets, not the Kubernetes desired replica count.",
+      "type": "stat",
+      "title": "Ready product replicas (observed)",
+      "description": "Count of healthy Prometheus product scrape targets. Expected 3; this is not Kubernetes desired replicas.",
       "gridPos": {
         "x": 0,
         "y": 0,
-        "w": 12,
-        "h": 8
+        "w": 6,
+        "h": 5
       },
       "datasource": {
         "type": "prometheus",
@@ -34,8 +34,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "count(up{job=\"spring-boot-staging\",application=\"product-service\"} == 1)",
-          "legendFormat": "healthy scrape targets"
+          "expr": "count(up{job=\"spring-boot-staging\",application=\"product-service\",namespace=\"staging\"} == 1)",
+          "legendFormat": "Ready"
         }
       ],
       "fieldConfig": {
@@ -45,25 +45,30 @@
         "overrides": []
       },
       "options": {
-        "tooltip": {
-          "mode": "multi"
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
         },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        }
+        "orientation": "horizontal",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
       }
     },
     {
       "id": 2,
-      "type": "timeseries",
-      "title": "CPU usage per product pod (cores)",
-      "description": "Per-pod CPU is supporting evidence of workload distribution.",
+      "type": "stat",
+      "title": "Discovered product pods",
+      "description": "Pods with a Prometheus scrape target, including unhealthy targets. Can briefly include terminating pods.",
       "gridPos": {
-        "x": 12,
+        "x": 6,
         "y": 0,
-        "w": 12,
-        "h": 8
+        "w": 6,
+        "h": 5
       },
       "datasource": {
         "type": "prometheus",
@@ -72,8 +77,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"staging\",pod=~\"product-service-.*\",container=\"product-service\"}[1m]))",
-          "legendFormat": "{{pod}}"
+          "expr": "count(up{job=\"spring-boot-staging\",application=\"product-service\",namespace=\"staging\"})",
+          "legendFormat": "Discovered"
         }
       ],
       "fieldConfig": {
@@ -83,23 +88,114 @@
         "overrides": []
       },
       "options": {
-        "tooltip": {
-          "mode": "multi"
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
         },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        }
+        "orientation": "horizontal",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
       }
     },
     {
       "id": 3,
+      "type": "stat",
+      "title": "Total product gRPC calls (selected range)",
+      "description": "Completed inbound gRPC calls during the selected Grafana range; ensure sufficient order-service traffic.",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(grpc_server_seconds_count{namespace=\"staging\",application=\"product-service\"}[$__range])) or vector(0)",
+          "legendFormat": "gRPC calls"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Product HTTP errors (selected range)",
+      "description": "Server-observed HTTP 4xx/5xx/nonstandard 6xx; not gRPC failures or network failures.",
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(http_server_requests_seconds_count{namespace=\"staging\",application=\"product-service\",uri!~\"/actuator.*\",status=~\"[456]..\"}[$__range])) or vector(0)",
+          "legendFormat": "HTTP errors"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 5,
       "type": "timeseries",
-      "title": "gRPC calls per product pod (calls/sec)",
-      "description": "Completed incoming gRPC calls per pod; compare lines under sufficient traffic.",
+      "title": "gRPC calls handled by each pod (calls/sec)",
+      "description": "This is order-to-product gRPC traffic, not direct product REST traffic. A single consistently dominant line suggests connection pinning.",
       "gridPos": {
         "x": 0,
-        "y": 8,
+        "y": 5,
         "w": 12,
         "h": 8
       },
@@ -110,7 +206,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (pod) (rate(grpc_server_seconds_count{namespace=\"staging\",application=\"product-service\"}[1m]))",
+          "expr": "sum by (pod)(rate(grpc_server_seconds_count{namespace=\"staging\",application=\"product-service\"}[1m]))",
           "legendFormat": "{{pod}}"
         }
       ],
@@ -129,6 +225,327 @@
           "placement": "bottom"
         }
       }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Direct HTTP requests per pod (req/sec)",
+      "description": "Separate product-service HTTP path. Direct HTTP may be well distributed even when gRPC is pinned to one pod.",
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (pod)(rate(http_server_requests_seconds_count{namespace=\"staging\",application=\"product-service\",uri!~\"/actuator.*\"}[1m]))",
+          "legendFormat": "{{pod}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "bargauge",
+      "title": "gRPC distribution per pod (%)",
+      "description": "Share of gRPC calls per product pod in 1-minute windows. Three evenly loaded pods would approach 33% each under sufficient traffic; not a guarantee.",
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * sum by (pod)(rate(grpc_server_seconds_count{namespace=\"staging\",application=\"product-service\"}[1m])) / clamp_min(sum(rate(grpc_server_seconds_count{namespace=\"staging\",application=\"product-service\"}[1m])),0.001)",
+          "legendFormat": "{{pod}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true
+      }
+    },
+    {
+      "id": 8,
+      "type": "bargauge",
+      "title": "gRPC calls per pod (selected range)",
+      "description": "Absolute completed gRPC requests by pod for the selected time range. A near-zero pod indicates it received little/no completed RPC traffic.",
+      "gridPos": {
+        "x": 12,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (pod)(increase(grpc_server_seconds_count{namespace=\"staging\",application=\"product-service\"}[$__range]))",
+          "legendFormat": "{{pod}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "HTTP errors per pod, by status (req/sec)",
+      "description": "Server-observed product REST failures: 4xx, 5xx and 6xx if emitted. gRPC failures and network timeouts are not measured here; JMeter JTL for end-to-end errors.",
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (pod,status)(rate(http_server_requests_seconds_count{namespace=\"staging\",application=\"product-service\",uri!~\"/actuator.*\",status=~\"[456]..\"}[1m]))",
+          "legendFormat": "{{pod}} HTTP {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "CPU per product pod (cores)",
+      "description": "Supporting evidence only: CPU disparity alone does not demonstrate a gRPC imbalance.",
+      "gridPos": {
+        "x": 12,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (pod)(rate(container_cpu_usage_seconds_total{namespace=\"staging\",pod=~\"product-service-.*\",container=\"product-service\"}[1m]))",
+          "legendFormat": "{{pod}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Pod $product_pod — gRPC versus HTTP and HTTP errors",
+      "description": "One panel PER discovered product pod (automatically repeated). gRPC completed calls/s and direct HTTP calls/s are separate traffic; HTTP errors/s are server-side only. Zero gRPC may mean no completed RPCs.",
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 8,
+        "h": 9
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(grpc_server_seconds_count{namespace=\"staging\",application=\"product-service\",pod=\"$product_pod\"}[1m])) or vector(0)",
+          "legendFormat": "gRPC completed /s"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(http_server_requests_seconds_count{namespace=\"staging\",application=\"product-service\",pod=\"$product_pod\",uri!~\"/actuator.*\"}[1m])) or vector(0)",
+          "legendFormat": "HTTP requests /s"
+        },
+        {
+          "refId": "C",
+          "expr": "sum(rate(http_server_requests_seconds_count{namespace=\"staging\",application=\"product-service\",pod=\"$product_pod\",uri!~\"/actuator.*\",status=~\"[456]..\"}[1m])) or vector(0)",
+          "legendFormat": "HTTP 4xx+ /s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "repeat": "product_pod",
+      "repeatDirection": "h",
+      "maxPerRow": 3
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Pod $product_pod — error count",
+      "description": "Per-pod HTTP errors (4xx/5xx/6xx) over selected range. Not gRPC status or transport failures.",
+      "gridPos": {
+        "x": 0,
+        "y": 38,
+        "w": 8,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(http_server_requests_seconds_count{namespace=\"staging\",application=\"product-service\",pod=\"$product_pod\",uri!~\"/actuator.*\",status=~\"[456]..\"}[$__range])) or vector(0)",
+          "legendFormat": "HTTP errors"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "repeat": "product_pod",
+      "repeatDirection": "h",
+      "maxPerRow": 3
     }
-  ]
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "product_pod",
+        "label": "Product pod (automatic)",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "refresh": 2,
+        "query": {
+          "query": "label_values(up{job=\"spring-boot-staging\",application=\"product-service\",namespace=\"staging\"},pod)",
+          "refId": "product_pod"
+        },
+        "definition": "label_values(up{job=\"spring-boot-staging\",application=\"product-service\",namespace=\"staging\"},pod)",
+        "multi": true,
+        "includeAll": false,
+        "sort": 1,
+        "hide": 2,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": []
+      }
+    ]
+  }
 }
