@@ -1,0 +1,12 @@
+# Start ONLY ecommerce-mono (one replica), stop user/product/order services.
+name: "01 · Monolith — load & spike"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  stage:
+    uses: ./.github/workflows/workshop-stage-engine.yaml
+    with:
+      stage: "01"
+    secrets: inherit
