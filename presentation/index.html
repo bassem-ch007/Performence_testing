@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#07121e">
+  <title>Performance Lab | Monolith → Microservices → Zero Downtime</title>
+  <link rel="stylesheet" href="./style.css">
+  <script src="./app.js" defer></script>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar" aria-label="Presentation navigation">
+    <div class="brand"><span class="brand-symbol">P<span>.</span></span><div><strong>PERFORMANCE<br>LAB</strong><small>Azure k3s workshop · 2026</small></div></div>
+    <div class="nav-label">THE WORKSHOP</div>
+    <nav id="navigation">
+      <a href="#intro" data-page="intro"><span>00</span> Roadmap</a>
+      <a href="#monolith" data-page="monolith"><span>01</span> Monolith</a>
+      <a href="#microservices" data-page="microservices"><span>02</span> Microservices</a>
+      <a href="#replication" data-page="replication"><span>03</span> Replication</a>
+      <a href="#problem" data-page="problem"><span>03b</span> gRPC imbalance</a>
+      <a href="#correction" data-page="correction"><span>04</span> gRPC correction</a>
+      <a href="#cicd" data-page="cicd"><span>05</span> CI / CD explained</a>
+      <a href="#rollout" data-page="rollout"><span>05b</span> Zero-downtime test</a>
+      <a href="#recap" data-page="recap"><span>06</span> Results &amp; lessons</a>
+    </nav>
+    <div class="sidebar-bottom"><span class="live-dot"></span> STATIC · OFFLINE READY <small>Use ← → to navigate</small></div>
+  </aside>
+  <main class="main">
+    <header class="topbar"><div class="crumb"><span class="pale">PERFORMANCE ENGINEERING</span><span class="slash"> / </span><span id="crumb">ROADMAP</span></div><div class="top-right"><span class="chip">LIVE DEMO GUIDE</span><span id="progress">01 / 09</span></div></header>
+
+    <section class="page active" id="intro" data-title="ROADMAP">
+      <div class="eyebrow"><span class="line"></span> WELCOME · END-TO-END PERFORMANCE WORKSHOP</div>
+      <h1>From one application <br>to <em>zero-downtime releases.</em></h1>
+      <p class="lead">Five independent GitHub Actions experiments. One Kubernetes cluster. Understand what changes, what breaks, and what the metrics actually prove.</p>
+      <div class="hero-stack">
+        <div class="journey-cell"><div class="journey-no">01</div><div><strong>Architecture</strong><small>Monolith → microservices</small></div><span class="arrow">→</span></div>
+        <div class="journey-cell"><div class="journey-no">02</div><div><strong>Scale</strong><small>1 → 3 product pods</small></div><span class="arrow">→</span></div>
+        <div class="journey-cell"><div class="journey-no">03</div><div><strong>Diagnose</strong><small>gRPC connection affinity</small></div><span class="arrow">→</span></div>
+        <div class="journey-cell"><div class="journey-no">04</div><div><strong>Correct</strong><small>Headless DNS + round-robin</small></div><span class="arrow">→</span></div>
+        <div class="journey-cell accent"><div class="journey-no">05</div><div><strong>Release</strong><small>CI/CD under live traffic</small></div></div>
+      </div>
+      <div class="callout"><strong>The central question</strong> Can an application scale and update while requests continue to arrive — without losing availability or concealing failures?</div>
+      <div class="speaker"><strong>Presenter cue</strong> Explain that pipelines are independently runnable: each restores the target experiment state. CI/CD is an experiment in its own right, not a prerequisite for the other stages.</div>
+    </section>
+
+    <section class="page" id="monolith" data-title="MONOLITH">
+      <div class="eyebrow"><span class="line"></span> PIPELINE 01 · ARCHITECTURE</div>
+      <h1>One service.<br><em>One deployment unit.</em></h1>
+      <p class="lead">Users, products, carts and orders live inside a single application with one shared database. Simple deployment; shared scaling and failure boundaries.</p>
+      <div class="diagram single-path">
+        <div class="node users"><span class="node-icon">◉</span><strong>JMeter clients</strong><small>HTTP traffic</small></div><div class="connector"><span>HTTP</span></div>
+        <div class="big-service"><div class="head"><span class="mini-dot"></span> ECOMMERCE MONOLITH <span class="version">v1.0.0</span></div><div class="module-grid"><div>👤 Users</div><div>▣ Products</div><div>◫ Carts</div><div>▧ Orders</div></div><div class="service-foot">One process · One pod · One release</div></div>
+        <div class="connector"><span>SQL</span></div><div class="node database"><span class="node-icon">▤</span><strong>PostgreSQL</strong><small>shared data</small></div>
+      </div>
+      <div class="insights"><article><span>ADVANTAGE</span><h3>Simple to understand</h3><p>One build, one deployment, direct in-process calls.</p></article><article><span>TRADE-OFF</span><h3>Coupled scaling</h3><p>A hot product endpoint consumes resources in the same runtime as orders.</p></article><article><span>DEMO</span><h3>Load &amp; spike</h3><p>Measure throughput, latency and JMeter failures as traffic grows.</p></article></div>
+      <div class="action-line"><a target="_blank" rel="noreferrer" href="https://github.com/bassem-ch007/Performence_testing/actions/workflows/workshop-01.yaml">Pipeline 01 ↗</a><small>Expected: monolith 1 · microservices 0</small></div>
+      <div class="speaker"><strong>Presenter cue</strong> A monolith is not necessarily slower. We are comparing deployment and scaling behavior; equal workloads are required for a fair throughput comparison.</div>
+    </section>
+
+    <section class="page" id="microservices" data-title="MICROSERVICES">
+      <div class="eyebrow"><span class="line"></span> PIPELINE 02 · ARCHITECTURE</div>
+      <h1>Split responsibilities.<br><em>Keep the business flow.</em></h1>
+      <p class="lead">Separate API services communicate through REST and gRPC. Each can be deployed and scaled independently, while PostgreSQL remains shared in this workshop setup.</p>
+      <div class="diagram">
+        <div class="path-top">JMETER CLIENTS <span>HTTP / NodePort</span></div>
+        <div class="service-columns">
+          <div class="micro-node cyan"><span>01 / USERS</span><strong>user-service</strong><small>1 pod · REST :30081</small></div>
+          <div class="micro-node violet"><span>02 / PRODUCTS</span><strong>product-service</strong><small>1 pod · REST :30082</small></div>
+          <div class="micro-node orange"><span>03 / ORDERS</span><strong>order-service</strong><small>1 pod · REST :30083</small></div>
+        </div>
+        <div class="rpc-strip"><span>order-service → user-service: gRPC</span><span>order-service → product-service: gRPC</span></div>
+        <div class="database-bar">▤ &nbsp; PostgreSQL · shared workshop database</div>
+      </div>
+      <div class="insights"><article><span>ADVANTAGE</span><h3>Independent deployment</h3><p>Update product-service without rebuilding order-service.</p></article><article><span>TRADE-OFF</span><h3>Network dependencies</h3><p>RPC failures, timeouts and connection reuse now matter.</p></article><article><span>MEASURE</span><h3>End-to-end latency</h3><p>Track JMeter outcomes separately from each service’s server metrics.</p></article></div>
+      <div class="action-line"><a target="_blank" rel="noreferrer" href="https://github.com/bassem-ch007/Performence_testing/actions/workflows/workshop-02.yaml">Pipeline 02 ↗</a><small>Expected: user 1 · product 1 · order 1</small></div>
+      <div class="speaker"><strong>Presenter cue</strong> Compare architecture, not just raw speed: the mono and micro JMeter plans have different default mixes. Equalize traffic if you want a defensible benchmark comparison.</div>
+    </section>
+
+    <section class="page" id="replication" data-title="REPLICATION">
+      <div class="eyebrow"><span class="line"></span> PIPELINE 03 · KUBERNETES SCALING</div>
+      <h1>One replica becomes <em>three.</em></h1>
+      <p class="lead">A Deployment creates three product-service pods behind a Kubernetes Service. Kubernetes can keep all three healthy — but that does not prove the client distributes requests evenly.</p>
+      <div class="diagram">
+        <div class="path-top">PRODUCT SERVICE · Kubernetes ClusterIP <span>Three ready endpoints</span></div>
+        <div class="replica-row">
+          <div class="pod"><small>POD A</small><strong>product-service</strong><span class="pod-foot">v1.0.0 · Ready</span></div>
+          <div class="pod"><small>POD B</small><strong>product-service</strong><span class="pod-foot">v1.0.0 · Ready</span></div>
+          <div class="pod"><small>POD C</small><strong>product-service</strong><span class="pod-foot">v1.0.0 · Ready</span></div>
+        </div>
+        <div class="signal"><span>✓ Three healthy replicas</span><span>≠ Three equally busy replicas</span></div>
+      </div>
+      <div class="insights"><article><span>REPLICATION</span><h3>Availability capacity</h3><p>Three independent product runtimes can serve requests.</p></article><article><span>SERVICE ROUTING</span><h3>Different protocols</h3><p>HTTP requests and long-lived gRPC connections need not distribute alike.</p></article><article><span>PROOF</span><h3>Inspect each pod</h3><p>Break down gRPC and HTTP request rates by pod rather than only totals.</p></article></div>
+      <div class="action-line"><a target="_blank" rel="noreferrer" href="https://github.com/bassem-ch007/Performence_testing/actions/workflows/workshop-03.yaml">Pipeline 03 ↗</a><small>Expected: 3/3 product pods; baseline order-service v1.0.0</small></div>
+      <div class="speaker"><strong>Presenter cue</strong> Ask the room: “If Kubernetes says 3/3 Ready, does that mean each pod gets one third of the traffic?” The next slide shows why the answer is no.</div>
+    </section>
+
+    <section class="page" id="problem" data-title="gRPC IMBALANCE">
+      <div class="eyebrow"><span class="line"></span> STAGE 03 · MEASURED BEHAVIOR</div>
+      <h1>Three healthy pods.<br><em>One handles the gRPC traffic.</em></h1>
+      <p class="lead">The original order-service uses a long-lived gRPC channel targeting the normal product ClusterIP. That connection can remain pinned to one selected backend.</p>
+      <div class="diagram problem-diagram">
+        <div class="node source"><strong>order-service</strong><small>gRPC · v1.0.0</small></div>
+        <div class="branch-visual"><span class="beam-main">━━━━━━━━━━━━━━━━━━━━➜</span><span class="beam-muted">┄┄┄┄┄┄┄┄┄┄┄┄</span><span class="beam-muted">┄┄┄┄┄┄┄┄┄┄┄┄</span></div>
+        <div class="stacked-pods"><div class="pod hot"><small>POD A</small><strong>100% observed</strong><span>≈ 3.26k gRPC calls</span></div><div class="pod cold"><small>POD B</small><strong>No recorded calls</strong><span>Yet HTTP-active</span></div><div class="pod cold"><small>POD C</small><strong>No recorded calls</strong><span>Yet HTTP-active</span></div></div>
+      </div>
+      <div class="metric-strip"><div><small>PRODUCT PODS READY</small><strong>3 / 3</strong></div><div><small>RECORDED gRPC CALLS</small><strong>≈ 3,260</strong></div><div><small>JMETER SPIKE FAILURES</small><strong class="red">69.11%</strong></div></div>
+      <div class="callout warning"><strong>Interpretation, not overclaim</strong> Screenshots showed approximately 3,260 completed product gRPC calls on one pod, while direct HTTP traffic reached multiple pods. The 69.11% JMeter error rate occurred under 2,550 active threads; error causes are not attributable to gRPC alone without JTL analysis.</div>
+      <div class="speaker"><strong>Presenter cue</strong> Explain connection-based routing: balancing TCP connections is not equivalent to balancing individual gRPC requests multiplexed over HTTP/2. Note: the slide shows an observed distribution, not a universal prediction for all runs.</div>
+    </section>
+
+    <section class="page" id="correction" data-title="gRPC CORRECTION">
+      <div class="eyebrow"><span class="line"></span> PIPELINE 04 · NETWORK FIX</div>
+      <h1>Discover every pod.<br><em>Distribute RPCs.</em></h1>
+      <p class="lead">The corrected order-service uses a headless Kubernetes Service and a round-robin gRPC client policy, enabling the client to discover multiple product pod IPs and select among them.</p>
+      <div class="diagram">
+        <div class="correction-path"><div class="node source"><strong>order-service</strong><small>v1.1.0</small></div><div class="connection-step">→</div><div class="dns-node"><strong>Headless DNS</strong><small>product-service-grpc-headless:9092</small></div></div>
+        <div class="splitter"><span>↙</span><span>↓</span><span>↘</span></div>
+        <div class="replica-row corrected"><div class="pod"><small>POD A</small><strong>gRPC requests</strong><span class="pod-foot">Measured share ?</span></div><div class="pod"><small>POD B</small><strong>gRPC requests</strong><span class="pod-foot">Measured share ?</span></div><div class="pod"><small>POD C</small><strong>gRPC requests</strong><span class="pod-foot">Measured share ?</span></div></div>
+        <div class="signal good"><span>Client-side round_robin</span><span>Actual distribution requires verification</span></div>
+      </div>
+      <div class="insights"><article><span>BEFORE</span><h3>ClusterIP endpoint</h3><p>One long-lived gRPC transport can stay on a single backend.</p></article><article><span>AFTER</span><h3>Headless discovery</h3><p>Client resolves pod addresses and can distribute new RPCs.</p></article><article><span>COMPARE</span><h3>Same six panels</h3><p>Use identical load and time windows for Stage 03 and Stage 04.</p></article></div>
+      <div class="action-line"><a target="_blank" rel="noreferrer" href="https://github.com/bassem-ch007/Performence_testing/actions/workflows/workshop-04.yaml">Pipeline 04 ↗</a><small>Expected improvement · not yet validated with measured Stage 04 results</small></div>
+      <div class="speaker"><strong>Presenter cue</strong> Do not claim exactly 33/33/33. Round-robin is a routing policy, not a mathematical guarantee under finite traffic. Show per-pod metrics and JMeter failure codes after the new test.</div>
+    </section>
+
+    <section class="page" id="cicd" data-title="CI / CD">
+      <div class="eyebrow"><span class="line"></span> PIPELINE 05 · SOFTWARE DELIVERY</div>
+      <h1>CI builds the version.<br><em>CD replaces it safely.</em></h1>
+      <p class="lead">Continuous Integration creates an immutable Docker image from source. Continuous Deployment uses Kubernetes rolling updates to replace the previous product-service image.</p>
+      <div class="diagram delivery-flow">
+        <div class="delivery-step"><div class="step-number">01 · SOURCE</div><strong>GitHub main</strong><small>Product-service source</small></div><div class="flow-arrow">→</div>
+        <div class="delivery-step ci"><div class="step-number">02 · CI</div><strong>Build + publish</strong><small>Docker Hub · v1.1.1</small></div><div class="flow-arrow">→</div>
+        <div class="delivery-step cd"><div class="step-number">03 · CD</div><strong>Deploy image</strong><small>Azure k3s</small></div><div class="flow-arrow">→</div>
+        <div class="delivery-step"><div class="step-number">04 · VERIFY</div><strong>Health + JMeter</strong><small>Errors and latency</small></div>
+      </div>
+      <div class="two-col"><div class="explainer"><h3>CI — Continuous Integration</h3><p>Checkout source, validate the new tag, build `linux/amd64`, authenticate to Docker Hub and publish a versioned image. CI should not interrupt running pods.</p></div><div class="explainer"><h3>CD — Continuous Deployment</h3><p>Replace the old image with the new one while Kubernetes controls pod replacement. Readiness checks protect service routing; monitoring verifies observed continuity.</p></div></div>
+      <div class="callout"><strong>Independent experiment</strong> Pipeline 05 first restores three healthy old product replicas, so its rollout does not depend on Stage 04 being run beforehand. Avoid running another stage during its build or deployment.</div>
+      <div class="speaker"><strong>Presenter cue</strong> CI proves that a deployable artifact was built. CD proves that artifact was rolled into the cluster. Neither by itself proves zero downtime: that requires live client measurements.</div>
+    </section>
+
+    <section class="page" id="rollout" data-title="ZERO-DOWNTIME TEST">
+      <div class="eyebrow"><span class="line"></span> PIPELINE 05 · ZERO-DOWNTIME EXPERIMENT</div>
+      <h1>Replace the pods.<br><em>Keep serving traffic.</em></h1>
+      <p class="lead">Start continuous JMeter traffic before CD. Kubernetes allows one extra pod (<code>maxSurge: 1</code>) and requires zero unavailable desired replicas (<code>maxUnavailable: 0</code>) during the rolling update.</p>
+      <div class="rollout-steps">
+        <div class="rollout-card"><span>BEFORE</span><div class="pod-icons"><b class="old">OLD</b><b class="old">OLD</b><b class="old">OLD</b></div><small>3 old pods · v1.0.0</small></div>
+        <div class="rollout-card"><span>DURING</span><div class="pod-icons"><b class="old">OLD</b><b class="old">OLD</b><b class="old">OLD</b><b class="new">NEW</b></div><small>Up to 4 pods · new pod becomes ready</small></div>
+        <div class="rollout-card"><span>AFTER</span><div class="pod-icons"><b class="new">NEW</b><b class="new">NEW</b><b class="new">NEW</b></div><small>3 new pods · v1.1.1</small></div>
+      </div>
+      <div class="traffic-ribbon"><span class="pulse"></span> JMETER TRAFFIC CONTINUES THROUGHOUT BUILD → DEPLOY → VERIFICATION</div>
+      <div class="insights"><article><span>HEALTH</span><h3>Readiness + availability</h3><p>Watch ready pod counts and the public HTTP health endpoint.</p></article><article><span>USER EXPERIENCE</span><h3>JMeter failures</h3><p>Inspect all HTTP statuses, connection errors, assertion failures and p95/p99 latency.</p></article><article><span>CLAIM</span><h3>Zero observed downtime?</h3><p>Only conclude this if no client-visible failures occur in the tested interval.</p></article></div>
+      <div class="action-line"><a target="_blank" rel="noreferrer" href="https://github.com/bassem-ch007/Performence_testing/actions/workflows/workshop-05.yaml">Pipeline 05 ↗</a><small>Use an unused product-service image tag · continuous external load required</small></div>
+      <div class="speaker"><strong>Presenter cue</strong> A healthy Kubernetes rollout can still have HTTP request errors. Run JMeter from a separate machine and keep its JTL: that file is evidence of client-observed availability.</div>
+    </section>
+
+    <section class="page" id="recap" data-title="RESULTS & LESSONS">
+      <div class="eyebrow"><span class="line"></span> FINAL TAKEAWAYS</div>
+      <h1>Numbers first.<br><em>Claims second.</em></h1>
+      <p class="lead">Every experiment has an intended change, a measurable signal and a limitation. Explain the evidence before explaining the conclusion.</p>
+      <div class="summary-table">
+        <div class="table-head"><span>EXPERIMENT</span><span>WHAT TO OBSERVE</span><span>INTERPRETATION</span></div>
+        <div><strong>01 · Monolith</strong><span>Throughput · p95/p99 · failures</span><span>Single runtime baseline</span></div>
+        <div><strong>02 · Microservices</strong><span>Per-service requests · RPC timings</span><span>Distributed dependencies</span></div>
+        <div><strong>03 · Replication</strong><span>3/3 ready · one pod received ≈3.26k product RPCs</span><span>Observed gRPC imbalance</span></div>
+        <div><strong>04 · Correction</strong><span>Per-pod gRPC share under matched load</span><span>Improvement pending test</span></div>
+        <div><strong>05 · CI/CD</strong><span>JMeter failures · HTTP health · new pod readiness</span><span>Zero downtime pending test</span></div>
+      </div>
+      <div class="callout"><strong>Remember the scope</strong> Grafana server metrics do not capture every client timeout. For a defensible result, pair Prometheus with the JMeter JTL report, record the load shape and select equivalent comparison windows.</div>
+      <div class="speaker"><strong>Presenter cue</strong> Close with three ideas: replication is not request balancing; corrected routing must be measured; and zero downtime is a client-observed property, not just a successful CI/CD badge.</div>
+    </section>
+
+    <footer class="footer"><button id="prev" aria-label="Previous slide">← Previous</button><div class="dots" id="dots"></div><button id="next" aria-label="Next slide">Next →</button></footer>
+  </main>
+</div>
+</body>
+</html>
