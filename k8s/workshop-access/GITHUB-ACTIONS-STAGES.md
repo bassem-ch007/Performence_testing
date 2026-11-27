@@ -38,7 +38,7 @@ Grafana dashboard 00 (cluster overview) can remain open through the whole worksh
 4. Actions → `04 · gRPC correction — deploy v2` → Run workflow → enter **already-published** corrected order image tag; dashboard 04; rerun identical JMeter profile with 3 product pods.
 5. Actions → `05 · Rolling update — CI/CD and availability` → Run workflow → enter a **new unused** product image tag and a source ref; dashboard 05, keep JMeter running during deployment. CI builds/pushes before CD; the GitHub runner checks public HTTP health at 1-second intervals during deployment. A successful check does **not** prove all client requests succeeded: compare JMeter JTL failure rate and Grafana errors.
 
-All workflows report status in GitHub Actions. Before running each load test, wait for a green stage job and corresponding healthy endpoints. Stage 04 requires Stage 03; Stage 05 requires product replicas=3. Stage 02 resets baseline so you can repeat experiments without leaving the corrected version in place.
+All workflows report status in GitHub Actions. Before running each load test, wait for a green stage job and corresponding healthy endpoints. Stage 04 requires Stage 03; Stage 05 requires three healthy product-service replicas, but does not depend on Stage 04; either original or corrected order-service is acceptable. Stage 02 resets baseline so you can repeat experiments without leaving the corrected version in place.
 
 ## Limitations
 
@@ -54,8 +54,12 @@ The monolith is running 1/1, while user/product/order remain scaled 0/0 (verifie
 - Stage 02 checks database readiness, staging Secret, all three Deployments and Services **before** switching off the monolith; it restores baseline order/product image, gRPC target, and one replica each.
 - Stage 03 requires 1 ready microservice replica each, baseline images, and the baseline gRPC target before scaling product-service to 3.
 - Stage 04 requires the correct original image baseline and healthy 3-product-replica topology. It updates the order image and gRPC target together, then restores the prior image and *both* gRPC settings if the rollout or health check fails.
-- Stage 05 now executes a read-only **05-preflight** job before any Docker image is built. The build is skipped unless 3 healthy product replicas and the corrected order-service are ready. After CI, CD monitors public HTTP health during the rolling update and restores the previous product image if the rollout fails.
+- Stage 05 executes a read-only **05-preflight** job before any Docker image is built. The build is skipped unless three healthy product replicas and a healthy order-service are ready; Stage 04 is not required. After CI, CD monitors public HTTP health during the rolling update and restores the previous product image if the rollout fails.
 - Health availability polling is **HTTP /actuator/health only**, at roughly one probe per second during the rollout; it does not prove zero failed JMeter transactions or successful gRPC behavior. Compare the JMeter JTL and Grafana panels.
 - There are still no verified live results for stages 02–05; do not claim the workflows are fully validated until each succeeds.
 
 **Operational note:** Stage 02 involves an intentional architecture cutover, not zero downtime. The preflight reduces avoidable errors but cannot guarantee an automatic switchback if pods fail to start after monolith is stopped. Stage 04 needs the prepublished fixed order-service image; Stage 05 still needs the Docker Hub credentials and a new unused product-service image tag.
+
+## Stage 05: CI/CD under live load
+
+Stage 05 is an independent exercise after Stage 03 (three healthy product-service replicas). Keep an external JMeter workload running **before**, **during**, and **after** the pipeline. The workflow builds a previously unused product-service image tag, publishes to Docker Hub, and updates the Deployment with `maxSurge: 1` and `maxUnavailable: 0` while the GitHub runner polls the public product HTTP health URL. **It does not start JMeter automatically**, and zero health-probe failures alone do not demonstrate zero failed business transactions. Compare JMeter JTL error rate, response-time percentiles, and product-service pod replacements. The new tag may have the same application source as the original; Kubernetes still performs an image rollout, but a feature change requires an actual source change.
