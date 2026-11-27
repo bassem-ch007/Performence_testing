@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 # Only runs on the Azure VM. Actions transfers this script via pinned-host SSH.
 set -Eeuo pipefail
+# k3s kubectl defaults to the root-owned /etc/rancher/k3s/k3s.yaml even
+# for noninteractive SSH sessions; use the per-user kubeconfig instead.
+export KUBECONFIG="${HOME}/.kube/config"
+if [[ ! -r "$KUBECONFIG" ]]; then
+  echo "Kubernetes config is missing or unreadable: $KUBECONFIG" >&2
+  exit 1
+fi
 stage="${1:-}"
 tag="${2:-}"
 ns=staging
