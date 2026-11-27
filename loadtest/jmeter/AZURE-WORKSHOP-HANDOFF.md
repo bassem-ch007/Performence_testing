@@ -100,13 +100,13 @@ Grafana administrator credentials must not be committed or shared broadly. For p
 
 ### Grafana dashboards by workshop stage
 
-All six simplified dashboards are provisioned in Grafana's **Performance workshop** folder (23 panels total). The collaborator's original detailed monolith and microservices dashboards remain in their own repository as reference material.
+All six simplified dashboards are provisioned in Grafana's **Performance workshop** folder (28 panels total). The collaborator's original detailed monolith and microservices dashboards remain in their own repository as reference material.
 
 | Stage | Dashboard | What to examine |
 | --- | --- | --- |
 | All stages | Workshop · 00 Cluster overview | 4 panels: CPU, memory, HTTP throughput, 5xx errors |
-| 1 Monolith baseline/spike | Workshop · 01 Monolith — load & spike | 4 panels: HTTP throughput, p95, p99, 5xx error rate |
-| 2 Microservices baseline/spike | Workshop · 02 Microservices — load & spike | 6 panels: per-service throughput, p95, p99, errors, CPU, gRPC calls |
+| 1 Monolith baseline/spike | Workshop · 01 Monolith — load & spike | 7 panels: throughput, request rate and count by method/URI, p95, p99, 5xx error rate, CPU |
+| 2 Microservices baseline/spike | Workshop · 02 Microservices — load & spike | 8 panels: throughput and counts by service/method/URI, p95, p99, 5xx errors per service (zero fallback for successful traffic), CPU by pod, gRPC calls |
 | 3 Manual product replica scaling | Workshop · 03 Manual scaling — replicas & gRPC | 3 panels: healthy product targets, CPU and gRPC calls per pod |
 | 4 Corrected order-service deployment | Workshop · 04 gRPC correction — before & after | 3 panels: gRPC call rate, share and CPU per product pod |
 | 5 Product rolling update | Workshop · 05 Rolling update — continuity | 3 panels: healthy product targets, HTTP throughput and 5xx errors |
