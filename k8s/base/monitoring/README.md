@@ -4,7 +4,7 @@ This folder replaces the earlier minimal monitoring scaffold. Deployment is mana
 
 ## Components and isolation
 - Prometheus v3.5.0: gathers Kubernetes-staging annotated Spring `/actuator/prometheus` endpoints and kubelet cAdvisor pod/container CPU+memory metrics through Kubernetes API. Kubernetes RBAC is read-only. Retention 3 days.
-- Grafana 12.1.0: provisioned Prometheus and Loki datasources plus SIX workshop dashboards, including adaptations of the collaborator's original detailed monolith and microservices dashboards.
+- Grafana 12.1.0: six concise, stage-specific workshop dashboards (23 panels total) using Prometheus. The collaborator's original detailed dashboards remain available as reference in their repository.
 - Loki 3.5.3 + Fluent Bit 4.0.5 DaemonSet: central pod log aggregation using host `/var/log/containers` and Kubernetes labels; keep internal.
 - Persistent PVCs in `monitoring`: Prometheus 3Gi, Grafana 1Gi, Loki 2Gi. On a single local-path node with ReclaimPolicy Delete. The database in `data` is unchanged.
 
@@ -44,15 +44,16 @@ kubectl -n monitoring logs deployment/loki --tail=30
 kubectl -n monitoring logs daemonset/fluent-bit --tail=30
 kubectl -n monitoring port-forward svc/prometheus 9090:9090
 ```
-Prometheus UI on `127.0.0.1:9090` can query `up`. Spring and cAdvisor metrics appear only once the appropriate targets are deployed and discovered. Six dashboards are provisioned: `Workshop · K3s live overview`; `01 Monolith — load and spike` (44 panels, adapted from collaborator); `02 Microservices — load and gRPC` (52 panels, adapted); `03 Manual scaling & gRPC correction`; `04 gRPC client correction — before / after`; `05 Rolling update & availability`. The collaborator dashboards retain HTTP latency, errors, JVM, HikariCP, gRPC, resource and log sections. Select matching dashboard for each experiment. Grafana uses historical data for the selected time range; use separate run windows when comparing before vs after. JMeter JTL/HTML reports are compared manually against Grafana time ranges.
+Prometheus UI on `127.0.0.1:9090` can query `up`. Spring and cAdvisor metrics appear only once the appropriate targets are deployed and discovered. Six beginner-focused dashboards are provisioned: `00 Cluster overview` (4 panels); `01 Monolith load & spike` (4 panels including p95/p99); `02 Microservices load & spike` (6 panels including p95/p99); `03 Manual scaling` (3 panels); `04 gRPC correction` (3 panels); `05 Rolling update` (3 panels). JMeter provides virtual users and client-side results; Grafana shows observed server-side metrics.
 
 ## Limitations
 - JMeter test loads differ between the collaborator's monolith (80/15/5) and product-heavy microservices (65/15/20) plans; don't treat these as equivalent architecture baseline workloads.
 - Test logs and dashboard data can contain identifiers. Keep them private and use controlled test records.
 
 ## Dashboard validation / methodological caveats
-- Source dashboards from `dhifaouiiyed-star/Performence_testing` originally assumed Docker Compose (`name=` selectors, `job=monolith/microservices`, node-exporter and Docker Loki labels). The k3s versions adapt these to staging pod/application/namespace labels and Fluent Bit. **Deploying the JSON is not proof every panel returns data**: verify Hikari, CPU throttling, cAdvisor container-spec, network and log panels live; do not infer missing values as zeros.
+- The collaborator's original Docker Compose dashboards (44 monolith panels, 52 microservices panels) remain preserved in their repository. The workshop dashboards intentionally show only the metrics required by each teaching stage. Do not mistake missing series for zero traffic.
 - Direct HTTP load on `product-service` and order-service → product-service gRPC use different paths and load-balancing behavior. A **dominant pod is a hypothesis**, not a guaranteed outcome. Compare `grpc_server_seconds_count` by `pod` and its derived percentage under the same JMeter scenario before and after the corrected client; keep product replica count fixed at three for the correction phase.
 - The pod-replica graphs use the number of healthy scrape targets, not the Kubernetes Deployment desired replica count. For rollout source-image verification use `kubectl -n staging get pods -o wide` and actual `imageID` via `kubectl`, and correlate to Grafana. No kube-state-metrics exporter is installed.
 - Grafana is provisioned from `configMapGenerator`. To update dashboards without resetting staging `replicas: 0`: `kubectl apply -k k8s/base/monitoring` and `kubectl -n monitoring rollout status deployment/grafana`. Never reapply the Azure overlay during manual workshop scaling.
+- p95/p99 are Prometheus histogram estimates of server-side HTTP latency, not the JMeter client-side percentiles; JMeter JTL/HTML results remain necessary.
 - Public Grafana is login protected. Prometheus is not authenticated at the app layer; disable its public NSG access after the workshop.
