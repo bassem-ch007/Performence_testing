@@ -22,6 +22,7 @@ configMapGenerator:
       - workshop-monolith.json
       - workshop-microservices.json
       - workshop-grpc-scaling.json
+      - workshop-grpc-correction.json
       - workshop-rollout.json
   - name: loki-config
     namespace: monitoring
