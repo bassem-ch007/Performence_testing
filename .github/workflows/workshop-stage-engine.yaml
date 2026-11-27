@@ -1,0 +1,88 @@
+name: Reusable workshop stage engine
+
+on:
+  workflow_call:
+    inputs:
+      stage:
+        type: string
+        required: true
+      image_tag:
+        type: string
+        required: false
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: workshop-azure-stage
+  cancel-in-progress: false
+jobs:
+  execute:
+    runs-on: ubuntu-latest
+    environment: workshop-staging
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Configure verified Azure SSH connection
+        env:
+          DEPLOY_KEY: ${{ secrets.WORKSHOP_SSH_PRIVATE_KEY }}
+          KNOWN_HOSTS: ${{ secrets.WORKSHOP_SSH_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ vars.WORKSHOP_SSH_HOST }}
+          DEPLOY_USER: ${{ vars.WORKSHOP_SSH_USER }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_KEY" && test -n "$KNOWN_HOSTS" && test -n "$DEPLOY_HOST" && test -n "$DEPLOY_USER" || {
+            echo "::error::Configure workshop-staging SSH key, verified known_hosts, host and user in GitHub Environment."
+            exit 1
+          }
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/workshop_deploy
+          chmod 600 ~/.ssh/workshop_deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          printf '%s\n' 'Host workshop-azure' "  HostName $DEPLOY_HOST" "  User $DEPLOY_USER" '  IdentityFile ~/.ssh/workshop_deploy' '  IdentitiesOnly yes' '  StrictHostKeyChecking yes' > ~/.ssh/config
+          chmod 600 ~/.ssh/config
+      - name: Transfer stage runner (no manual server login)
+        run: scp -o ConnectTimeout=20 scripts/workshop-stage.sh workshop-azure:/tmp/workshop-stage.sh
+      - name: Execute workshop stage
+        env:
+          STAGE: ${{ inputs.stage }}
+          TAG: ${{ inputs.image_tag }}
+          PUBLIC_IP: ${{ vars.WORKSHOP_PUBLIC_IP }}
+        run: |
+          set -euo pipefail
+          [[ "$STAGE" =~ ^0[1-5]$ ]] || exit 2
+          if [[ "$STAGE" == "04" || "$STAGE" == "05" ]]; then
+            [[ "$TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 2
+          fi
+          if [[ "$STAGE" != "05" ]]; then
+            ssh -o ConnectTimeout=20 workshop-azure "bash /tmp/workshop-stage.sh '$STAGE' '$TAG'"
+            exit 0
+          fi
+          test -n "$PUBLIC_IP" || { echo "::error::Set WORKSHOP_PUBLIC_IP to monitor HTTP availability during Stage 05"; exit 1; }
+          URL="http://$PUBLIC_IP:30082/actuator/health"
+          curl -fsS --max-time 6 "$URL" >/dev/null || {
+            echo "::error::Product HTTP health unavailable before deployment"; exit 1;
+          }
+          # Start the rollout in parallel with public HTTP polling; record failures.
+          ssh -o ConnectTimeout=20 workshop-azure "bash /tmp/workshop-stage.sh '$STAGE' '$TAG'" &
+          deploy_pid=$!
+          total=0; failures=0
+          # Probe for up to two minutes; if rollout lasts longer, deployment status
+          # is still checked below and the summary records only the observed window.
+          for ((i=0;i<120;i++)); do
+            if curl -fsS --max-time 2 "$URL" >/dev/null; then :; else failures=$((failures+1)); fi
+            total=$((total+1))
+            sleep 1
+            if ! kill -0 "$deploy_pid" 2>/dev/null && (( i > 10 )); then break; fi
+          done
+          deploy_rc=0
+          wait "$deploy_pid" || deploy_rc=$?
+          echo "### Stage 05: rolling update" >> "$GITHUB_STEP_SUMMARY"
+          echo "- HTTP health probes: $total" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Failed HTTP health probes: $failures" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Deployment return code: $deploy_rc" >> "$GITHUB_STEP_SUMMARY"
+          if (( deploy_rc != 0 || failures > 0 )); then
+            echo "::error::Rolling update or HTTP continuity check failed"
+            exit 1
+          fi

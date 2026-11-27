@@ -1,0 +1,134 @@
+{
+  "uid": "workshop-grpc-correction",
+  "title": "Workshop · 04 · gRPC correction — before & after",
+  "description": "Keep three product replicas and the same JMeter scenario. Observe measured request distribution before and after an order-service client update.",
+  "tags": [
+    "workshop",
+    "k3s",
+    "grpc"
+  ],
+  "schemaVersion": 41,
+  "version": 2,
+  "refresh": "5s",
+  "timezone": "browser",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "gRPC calls per product pod (calls/sec)",
+      "description": "Completed gRPC calls per pod. Compare equivalent time windows.",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (pod) (rate(grpc_server_seconds_count{namespace=\"staging\",application=\"product-service\"}[1m]))",
+          "legendFormat": "{{pod}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Share of product gRPC calls by pod (%)",
+      "description": "Percentage of completed gRPC calls handled by each product pod. No dominance is assumed.",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * sum by (pod) (rate(grpc_server_seconds_count{namespace=\"staging\",application=\"product-service\"}[1m])) / clamp_min(sum(rate(grpc_server_seconds_count{namespace=\"staging\",application=\"product-service\"}[1m])), 0.001)",
+          "legendFormat": "{{pod}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "CPU usage per product pod (cores)",
+      "description": "Check whether CPU demand becomes more evenly distributed.",
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"staging\",pod=~\"product-service-.*\",container=\"product-service\"}[1m]))",
+          "legendFormat": "{{pod}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    }
+  ]
+}

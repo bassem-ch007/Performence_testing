@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ecommerce-mono
+  namespace: staging
+spec:
+  replicas: 0
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: ecommerce-mono
+  template:
+    metadata:
+      labels:
+        app: ecommerce-mono
+        architecture: monolith
+      annotations:
+        prometheus.io/scrape: "true"
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: ecommerce-mono
+          image: bassem00/perf-monolith:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: staging
+            - name: ARCHITECTURE
+              value: monolith
+            - name: SPRING_JPA_SHOW_SQL
+              value: "false"
+            - name: LOGGING_STRUCTURED_FORMAT_CONSOLE
+              value: logstash
+            - name: DATABASE_URL
+              value: jdbc:postgresql://postgres.data.svc.cluster.local:5432/ecommercedb
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: app-postgres-auth
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-postgres-auth
+                  key: POSTGRES_PASSWORD
+            - name: JAVA_OPTS
+              value: "-XX:MaxRAMPercentage=65.0"
+          resources:
+            requests:
+              cpu: 300m
+              memory: 512Mi
+            limits:
+              cpu: 1500m
+              memory: 3Gi
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 36
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            periodSeconds: 15
+            failureThreshold: 4
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ecommerce-mono
+  namespace: staging
+spec:
+  type: ClusterIP
+  selector:
+    app: ecommerce-mono
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
