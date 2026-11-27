@@ -1,6 +1,6 @@
 {
   "uid": "workshop-rollout",
-  "title": "Workshop · 04 Rolling update & availability",
+  "title": "Workshop · 05 Rolling update & availability",
   "description": "Product-service release with rolling deployment; monitor pod replacement and availability under identical JMeter workload. App image revisions must be checked via kubectl; Prometheus counters cannot prove the image tag changed.",
   "tags": [
     "workshop",
