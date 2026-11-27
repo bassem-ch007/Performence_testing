@@ -24,8 +24,14 @@ spring:
       channel:
         user-service:
           target: ${USER_GRPC_TARGET:localhost:9091}
+          # One gRPC HTTP/2 connection per resolved backend; make balancing explicit.
+          # Kubernetes needs a headless Service to return individual Pod addresses.
+          default:
+            load-balancing-policy: ${GRPC_LOAD_BALANCING_POLICY:round_robin}
         product-service:
           target: ${PRODUCT_GRPC_TARGET:localhost:9092}
+          default:
+            load-balancing-policy: ${GRPC_LOAD_BALANCING_POLICY:round_robin}
 
 server:
   port: ${ORDER_HTTP_PORT:8083}

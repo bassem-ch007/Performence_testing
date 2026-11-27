@@ -1,2 +1,12 @@
 .env
 .idea/
+# Test outputs are generated locally and should not be committed.
+loadtest/jmeter/results/
+loadtest/results/
+**/*.jtl
+**/jmeter.log
+# Maven output
+**/target/
+# Local editor and OS files
+.vscode/
+.DS_Store
