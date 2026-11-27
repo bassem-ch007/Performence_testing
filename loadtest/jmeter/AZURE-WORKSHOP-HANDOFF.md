@@ -100,7 +100,7 @@ Grafana administrator credentials must not be committed or shared broadly. For p
 
 ### Grafana dashboards by workshop stage
 
-All six dashboards are provisioned in Grafana's **Performance workshop** folder. The monolith (44 panels) and microservices (52 panels) dashboards preserve and adapt the collaborator's original detailed dashboards.
+All six simplified dashboards are provisioned in Grafana's **Performance workshop** folder (23 panels total). The collaborator's original detailed monolith and microservices dashboards remain in their own repository as reference material.
 
 | Stage | Dashboard | What to examine |
 | --- | --- | --- |
