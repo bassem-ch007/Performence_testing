@@ -104,12 +104,12 @@ All six dashboards are provisioned in Grafana's **Performance workshop** folder.
 
 | Stage | Dashboard | What to examine |
 | --- | --- | --- |
-| All stages | Workshop · K3s live overview | CPU/memory, RPS, latency, logs across the cluster |
-| 1 Monolith baseline/spike | Workshop · 01 Monolith — load and spike | Throughput, p95/p99 latency, errors, HikariCP, JVM, container pressure |
-| 2 Microservices baseline/spike | Workshop · 02 Microservices — load and gRPC | Per-service HTTP, gRPC, JVM/DB pools, service CPU, logs |
-| 3 Manual product replica scaling | Workshop · 03 Manual scaling & gRPC correction | Pod CPU, direct HTTP and gRPC request rates separately |
-| 4 Corrected order-service deployment | Workshop · 04 gRPC client correction — before / after | Three product pods, gRPC call shares per pod, client errors, same load profile |
-| 5 Product rolling update | Workshop · 05 Rolling update & availability | Healthy scrape targets, pod replacement, response latency, HTTP errors |
+| All stages | Workshop · 00 Cluster overview | 4 panels: CPU, memory, HTTP throughput, 5xx errors |
+| 1 Monolith baseline/spike | Workshop · 01 Monolith — load & spike | 4 panels: HTTP throughput, p95, p99, 5xx error rate |
+| 2 Microservices baseline/spike | Workshop · 02 Microservices — load & spike | 6 panels: per-service throughput, p95, p99, errors, CPU, gRPC calls |
+| 3 Manual product replica scaling | Workshop · 03 Manual scaling — replicas & gRPC | 3 panels: healthy product targets, CPU and gRPC calls per pod |
+| 4 Corrected order-service deployment | Workshop · 04 gRPC correction — before & after | 3 panels: gRPC call rate, share and CPU per product pod |
+| 5 Product rolling update | Workshop · 05 Rolling update — continuity | 3 panels: healthy product targets, HTTP throughput and 5xx errors |
 
 Do not declare one product pod dominates until direct per-pod gRPC data under sufficient traffic supports it. For A/B tests, retain identical JMeter settings and choose equivalent time ranges. Grafana's pod availability series counts responding Prometheus scrape targets; verify actual Kubernetes image versions and deployment status separately. See `k8s/base/monitoring/README.md` for panel caveats.
 
