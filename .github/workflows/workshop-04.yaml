@@ -1,0 +1,19 @@
+# Deploy already published corrected order-service image; target headless product service.
+name: "04 · gRPC correction — deploy v2"
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Prepublished corrected order-service semver (NOT 1.0.0)"
+        required: true
+        type: string
+        default: "1.1.0"
+permissions:
+  contents: read
+jobs:
+  stage:
+    uses: ./.github/workflows/workshop-stage-engine.yaml
+    with:
+      stage: "04"
+      image_tag: ${{ inputs.image_tag }}
+    secrets: inherit
