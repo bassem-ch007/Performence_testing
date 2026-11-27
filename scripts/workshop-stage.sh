@@ -52,6 +52,8 @@ case "$stage" in
     [[ "$(getreplicas user-service)" == 1 && "$(getreplicas order-service)" == 1 ]] || { echo "First run Stage 02" >&2; exit 1; }
     [[ "$(getimage order-service)" == "$baseline_order" ]] || { echo "Order version is not 1.0.0; first run Stage 02" >&2; exit 1; }
     [[ "$(getimage product-service)" == "$baseline_product" ]] || { echo "Product version is not 1.0.0; first run Stage 02" >&2; exit 1; }
+    target="$(kubectl -n "$ns" get deployment order-service -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="PRODUCT_GRPC_TARGET")].value}')"
+    [[ "$target" == "$baseline_target" ]] || { echo "Order-service is not using the baseline gRPC target; rerun Stage 02" >&2; exit 1; }
     setreplicas product-service 3
     ready product-service
     health product-service 8082
