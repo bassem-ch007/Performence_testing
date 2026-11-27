@@ -85,6 +85,19 @@ kubectl -n staging rollout status deployment/product-service
 ```
 The `k8s/base/staging` Deployment manifests intentionally declare `replicas: 0`; reapplying the whole Azure Kustomize overlay during a manual scaling experiment **will reset them to 0**. Apply only targeted manifests when updating monitoring/access.
 
+## Monitoring web access for instructor and participants
+
+Monitoring web endpoints use **different NodePorts** from the applications; deploy `k8s/workshop-access/monitoring-nodeports.yaml` and allow TCP `30300` and `30090` in the Azure VM NSG.
+
+| Component | Public URL | Notes |
+| --- | --- | --- |
+| Grafana | http://20.240.55.238:30300 | Login required; built-in workshop dashboards, Explore for Loki logs |
+| Prometheus | http://20.240.55.238:30090 | No HTTP authentication in this deployment; read/query UI/API accessible |
+| Loki | Internal only | Grafana queries via internal datasource, no public Loki NodePort |
+| Fluent Bit | Internal only | Log collector, no web UI |
+
+Grafana administrator credentials must not be committed or shared broadly. For participants, create a **Viewer** account in Grafana with a distinct password and no administrative privileges; optionally assign a dedicated instructor/admin account. Grafana's configured Prometheus and Loki datasources use internal Kubernetes DNS, so public Loki access is unnecessary. Exposed monitoring APIs can reveal cluster metadata and logs; restrict/disable the Azure NSG rules outside the supervised session.
+
 ## Observability & workshop sequence
 Prometheus scrapes `/actuator/prometheus` on staging application pods; Grafana dashboards cover pod CPU, memory, HTTP and product-pod completed gRPC request counters (`grpc_server_seconds_count`). Always separate **direct product HTTP traffic** from **order-service → product-service gRPC** when interpreting replica distribution. The experiment is manual scaling 1 → 3 product pods on original order-service client, then deploying a separately built fixed order-service with DNS headless round-robin and re-running the **same** load. CI already builds/publishes versioned Docker Hub images; CD for prebuilt corrected order-service and product-service rolling update are pending.
 
