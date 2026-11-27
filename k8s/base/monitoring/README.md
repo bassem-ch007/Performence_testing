@@ -4,7 +4,7 @@ This folder replaces the earlier minimal monitoring scaffold. Deployment is mana
 
 ## Components and isolation
 - Prometheus v3.5.0: gathers Kubernetes-staging annotated Spring `/actuator/prometheus` endpoints and kubelet cAdvisor pod/container CPU+memory metrics through Kubernetes API. Kubernetes RBAC is read-only. Retention 3 days.
-- Grafana 12.1.0: six concise, stage-specific workshop dashboards (23 panels total) using Prometheus. The collaborator's original detailed dashboards remain available as reference in their repository.
+- Grafana 12.1.0: six concise, stage-specific workshop dashboards (28 panels total) using Prometheus. The collaborator's original detailed dashboards remain available as reference in their repository.
 - Loki 3.5.3 + Fluent Bit 4.0.5 DaemonSet: central pod log aggregation using host `/var/log/containers` and Kubernetes labels; keep internal.
 - Persistent PVCs in `monitoring`: Prometheus 3Gi, Grafana 1Gi, Loki 2Gi. On a single local-path node with ReclaimPolicy Delete. The database in `data` is unchanged.
 
@@ -44,7 +44,7 @@ kubectl -n monitoring logs deployment/loki --tail=30
 kubectl -n monitoring logs daemonset/fluent-bit --tail=30
 kubectl -n monitoring port-forward svc/prometheus 9090:9090
 ```
-Prometheus UI on `127.0.0.1:9090` can query `up`. Spring and cAdvisor metrics appear only once the appropriate targets are deployed and discovered. Six beginner-focused dashboards are provisioned: `00 Cluster overview` (4 panels); `01 Monolith load & spike` (4 panels including p95/p99); `02 Microservices load & spike` (6 panels including p95/p99); `03 Manual scaling` (3 panels); `04 gRPC correction` (3 panels); `05 Rolling update` (3 panels). JMeter provides virtual users and client-side results; Grafana shows observed server-side metrics.
+Prometheus UI on `127.0.0.1:9090` can query `up`. Spring and cAdvisor metrics appear only once the appropriate targets are deployed and discovered. Six beginner-focused dashboards are provisioned: `00 Cluster overview` (4 panels); `01 Monolith load & spike` (7 panels including throughput, HTTP request type/volume, p95/p99, errors and CPU); `02 Microservices load & spike` (8 panels including throughput, per-service/method/endpoint counts, p95/p99, per-service errors, per-pod CPU and gRPC); `03 Manual scaling` (3 panels); `04 gRPC correction` (3 panels); `05 Rolling update` (3 panels). JMeter provides virtual users and client-side results; Grafana shows observed server-side metrics.
 
 ## Limitations
 - JMeter test loads differ between the collaborator's monolith (80/15/5) and product-heavy microservices (65/15/20) plans; don't treat these as equivalent architecture baseline workloads.
@@ -57,3 +57,6 @@ Prometheus UI on `127.0.0.1:9090` can query `up`. Spring and cAdvisor metrics ap
 - Grafana is provisioned from `configMapGenerator`. To update dashboards without resetting staging `replicas: 0`: `kubectl apply -k k8s/base/monitoring` and `kubectl -n monitoring rollout status deployment/grafana`. Never reapply the Azure overlay during manual workshop scaling.
 - p95/p99 are Prometheus histogram estimates of server-side HTTP latency, not the JMeter client-side percentiles; JMeter JTL/HTML results remain necessary.
 - Public Grafana is login protected. Prometheus is not authenticated at the app layer; disable its public NSG access after the workshop.
+
+- The microservices 5xx rate panel uses a zero-valued fallback for applications with successful traffic but no 5xx series. If a service has no requests at all, it will not be shown as a 0% error rate.
+- HTTP requests per endpoint are grouped using the Spring Boot `application`, `method`, and `uri` metric labels. They are server-side counts; the JMeter report measures client-side requests/errors, including connection failures that may not reach the server.
