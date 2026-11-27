@@ -48,6 +48,15 @@ case "$stage" in
     ;;
   02)
     echo "Stage 02: microservices baseline, one replica each"
+    # Fail before shutting down the monolith if shared dependencies are missing.
+    kubectl -n data get statefulset postgres >/dev/null
+    dbready="$(kubectl -n data get statefulset postgres -o jsonpath='{.status.readyReplicas}')"
+    [[ "${dbready:-0}" -ge 1 ]] || { echo "PostgreSQL is not ready; keeping monolith running" >&2; exit 1; }
+    kubectl -n "$ns" get secret app-postgres-auth >/dev/null
+    for name in user-service product-service order-service; do
+      kubectl -n "$ns" get deployment "$name" >/dev/null
+      kubectl -n "$ns" get service "$name" >/dev/null
+    done
     setreplicas ecommerce-mono 0
     # Return to known baseline for repeatability after stages 03/04/05.
     kubectl -n "$ns" set image deployment/order-service "order-service=$baseline_order"
