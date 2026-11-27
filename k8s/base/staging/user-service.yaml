@@ -24,8 +24,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: user-service
-          # Initial placeholder: must publish the image before scaling replicas above zero.
-          image: ghcr.io/bassem-ch007/performance-user-service:workshop-initial
+          image: bassem00/perf-user-service:1.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
