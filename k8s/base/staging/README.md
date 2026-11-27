@@ -11,8 +11,8 @@ All four Deployments are committed with **replicas: 0**. This ensures applying t
 
 Apps use the `staging` Spring profile with DB URL `jdbc:postgresql://postgres.data.svc.cluster.local:5432/ecommercedb`, `SPRING_JPA_SHOW_SQL=false`, and JSON console logs. They read `POSTGRES_USER` and `POSTGRES_PASSWORD` from **Secret `app-postgres-auth` inside `staging`**; Kubernetes Secrets are namespace-scoped and cannot reference `data/postgres-auth` directly.
 
-## IMPORTANT: Placeholder images
-Each Deployment currently references `ghcr.io/bassem-ch007/performance-<service>:workshop-initial` as a **placeholder, NOT a verified published image**. Publish/refer to the correct image and set `image` to a version or digest before scaling any Deployment to 1. Do not expect pod launch to succeed before this.
+## Published baseline images
+The four Deployment manifests reference the Docker Hub baseline images `bassem00/perf-monolith:1.0.0`, `bassem00/perf-user-service:1.0.0`, `bassem00/perf-product-service:1.0.0`, and `bassem00/perf-order-service:1.0.0`. These were built and deployed during Azure lab setup. Future images such as `1.1.0` must be published separately before using CD. Version tags are not sufficient proof of source contents: verify image digests and rollout readiness.
 
 ## Create staging DB secret safely on Azure
 Use a new password prompt for the same PostgreSQL password. This avoids decrypting/copying the existing cluster Secret:
@@ -47,4 +47,4 @@ For the following microservice experiment first scale monolith to zero, then sta
 
 Kustomize currently declares replicas=0. Reapplying the same overlay after manual scaling will set them back to zero: **do not blindly reapply the full overlay during active tests.** Later create architecture overlays or update replicas declaratively.
 
-The optional `http://localhost:8080` through `8083` access for external JMeter is NOT exposed yet. Use approved tunneling/explicit controlled ports when tests are ready. Application images, health checks and Prometheus target labels still require live verification.
+HTTP access for workshop participants uses separate Services in `k8s/workshop-access/nodeports.yaml`: monolith `30080`, user `30081`, product `30082`, order `30083`. Monitoring external access is in `k8s/workshop-access/monitoring-nodeports.yaml`: Grafana `30300` and Prometheus `30090`. The Azure NSG must allow these ports for attendees; remove public access after the session. Use `k8s/workshop-access/WORKSHOP-RUNBOOK.md` for architecture switching, JMeter smoke tests, gRPC correction and CD.
