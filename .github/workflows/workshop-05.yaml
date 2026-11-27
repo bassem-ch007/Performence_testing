@@ -18,7 +18,15 @@ permissions:
   contents: read
 
 jobs:
+  preflight:
+    name: "05-preflight · Kubernetes readiness"
+    uses: ./.github/workflows/workshop-stage-engine.yaml
+    with:
+      stage: "05-check"
+    secrets: inherit
+
   build:
+    needs: preflight
     name: "05a · CI — build and publish product-service"
     runs-on: ubuntu-latest
     steps:
