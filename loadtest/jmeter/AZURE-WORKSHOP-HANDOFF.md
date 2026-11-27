@@ -100,13 +100,13 @@ Grafana administrator credentials must not be committed or shared broadly. For p
 
 ### Grafana dashboards by workshop stage
 
-All six simplified dashboards are provisioned in Grafana's **Performance workshop** folder (28 panels total). The collaborator's original detailed monolith and microservices dashboards remain in their own repository as reference material.
+All six simplified dashboards are provisioned in Grafana's **Performance workshop** folder (30 panels total). The collaborator's original detailed monolith and microservices dashboards remain in their own repository as reference material.
 
 | Stage | Dashboard | What to examine |
 | --- | --- | --- |
 | All stages | Workshop · 00 Cluster overview | 4 panels: CPU, memory, HTTP throughput, 5xx errors |
 | 1 Monolith baseline/spike | Workshop · 01 Monolith — load & spike | 7 panels: throughput, request rate and count by method/URI, p95, p99, 5xx error rate, CPU |
-| 2 Microservices baseline/spike | Workshop · 02 Microservices — load & spike | 8 panels: throughput and counts by service/method/URI, p95, p99, 5xx errors per service (zero fallback for successful traffic), CPU by pod, gRPC calls |
+| 2 Microservices baseline/spike | Workshop · 02 Microservices — load & spike | 10 panels: throughput and counts by service/method/URI, HTTP p95/p99, 5xx errors, CPU by pod, gRPC request rate, gRPC client p95 and server p95 |
 | 3 Manual product replica scaling | Workshop · 03 Manual scaling — replicas & gRPC | 3 panels: healthy product targets, CPU and gRPC calls per pod |
 | 4 Corrected order-service deployment | Workshop · 04 gRPC correction — before & after | 3 panels: gRPC call rate, share and CPU per product pod |
 | 5 Product rolling update | Workshop · 05 Rolling update — continuity | 3 panels: healthy product targets, HTTP throughput and 5xx errors |
@@ -121,3 +121,5 @@ Order-service version 1.0.0 has a response-mapping bug: `OrderItemDTO.subTotal` 
 
 ## Ownership
 Collaborator owns JMeter workload validation, safety of seed data, reporting, and reproducible scenario tuning. Instructor owns k3s namespace replicas, network rule, metrics, image builds and CD. Test runner should preserve JTL/HTML reports outside tracked repository history.
+
+- **gRPC diagnosis:** Compare HTTP p95/p99 of order-service with the `grpc_client_seconds_bucket` p95 grouped by `rpc_method`, and the corresponding `grpc_server_seconds_bucket` p95 grouped by receiving `application` and `rpc_method`. Higher order-service latency may be partly due to waiting for remote RPCs, but time series alone do not prove causal attribution. Product-service's direct HTTP latency is a separate path; do not attribute it to gRPC without measurements of load contention. JMeter's HTTP percentiles reflect client-observed end-to-end latency.
