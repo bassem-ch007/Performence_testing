@@ -5,28 +5,26 @@ metadata:
   namespace: monitoring
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+kind: ClusterRole
 metadata:
-  name: prometheus-pod-reader
-  namespace: staging
+  name: workshop-prometheus-reader
 rules:
   - apiGroups: [""]
-    resources: ["pods"]
-    verbs: ["get", "list", "watch"]
+    resources: [pods, services, endpoints, nodes, nodes/proxy]
+    verbs: [get, list, watch]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+kind: ClusterRoleBinding
 metadata:
-  name: prometheus-pod-reader
-  namespace: staging
+  name: workshop-prometheus-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: workshop-prometheus-reader
 subjects:
   - kind: ServiceAccount
     name: prometheus
     namespace: monitoring
-roleRef:
-  kind: Role
-  name: prometheus-pod-reader
-  apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: v1
 kind: Service
@@ -34,12 +32,9 @@ metadata:
   name: prometheus
   namespace: monitoring
 spec:
-  selector:
-    app: prometheus
+  selector: {app: prometheus}
   ports:
-    - name: http
-      port: 9090
-      targetPort: http
+    - {name: http, port: 9090, targetPort: http}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -50,8 +45,7 @@ spec:
   accessModes: [ReadWriteOnce]
   storageClassName: local-path
   resources:
-    requests:
-      storage: 3Gi
+    requests: {storage: 3Gi}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -60,15 +54,12 @@ metadata:
   namespace: monitoring
 spec:
   replicas: 1
-  strategy:
-    type: Recreate
+  strategy: {type: Recreate}
   selector:
-    matchLabels:
-      app: prometheus
+    matchLabels: {app: prometheus}
   template:
     metadata:
-      labels:
-        app: prometheus
+      labels: {app: prometheus}
     spec:
       serviceAccountName: prometheus
       containers:
@@ -78,32 +69,18 @@ spec:
             - --config.file=/etc/prometheus/prometheus.yml
             - --storage.tsdb.path=/prometheus
             - --storage.tsdb.retention.time=3d
-          ports:
-            - name: http
-              containerPort: 9090
+          ports: [{name: http, containerPort: 9090}]
           resources:
-            requests:
-              cpu: 75m
-              memory: 192Mi
-            limits:
-              cpu: 250m
-              memory: 640Mi
+            requests: {cpu: 75m, memory: 192Mi}
+            limits: {cpu: 250m, memory: 640Mi}
           readinessProbe:
-            httpGet:
-              path: /-/ready
-              port: http
-            initialDelaySeconds: 5
+            httpGet: {path: /-/ready, port: http}
             periodSeconds: 5
           volumeMounts:
-            - name: config
-              mountPath: /etc/prometheus
-              readOnly: true
-            - name: data
-              mountPath: /prometheus
+            - {name: config, mountPath: /etc/prometheus, readOnly: true}
+            - {name: data, mountPath: /prometheus}
       volumes:
         - name: config
-          configMap:
-            name: prometheus-config
+          configMap: {name: prometheus-config}
         - name: data
-          persistentVolumeClaim:
-            claimName: prometheus-data
+          persistentVolumeClaim: {claimName: prometheus-data}

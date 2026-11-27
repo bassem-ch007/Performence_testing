@@ -1,0 +1,10 @@
+apiVersion: 1
+providers:
+  - name: Workshop
+    orgId: 1
+    folder: Performance workshop
+    type: file
+    disableDeletion: true
+    updateIntervalSeconds: 10
+    options:
+      path: /etc/grafana/workshop-dashboards

@@ -3,14 +3,25 @@ kind: Kustomization
 resources:
   - prometheus.yaml
   - grafana.yaml
+  - loki.yaml
+  - fluent-bit.yaml
+  - influxdb.yaml
 configMapGenerator:
   - name: prometheus-config
     namespace: monitoring
-    files:
-      - prometheus.yml
+    files: [prometheus.yml]
   - name: grafana-datasources
     namespace: monitoring
-    files:
-      - datasources.yaml
-generatorOptions:
-  disableNameSuffixHash: true
+    files: [datasources.yaml]
+  - name: grafana-dashboards-provider
+    namespace: monitoring
+    files: [dashboards-provider.yaml]
+  - name: grafana-dashboards
+    namespace: monitoring
+    files: [workshop-overview.json]
+  - name: loki-config
+    namespace: monitoring
+    files: [loki-config.yaml]
+  - name: fluent-bit-config
+    namespace: monitoring
+    files: [fluent-bit.conf]
