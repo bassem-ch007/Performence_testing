@@ -13,12 +13,3 @@ datasources:
     type: loki
     access: proxy
     url: http://loki.monitoring.svc.cluster.local:3100
-  - name: JMeter InfluxDB
-    uid: jmeter-influx
-    type: influxdb
-    access: proxy
-    url: http://influxdb.monitoring.svc.cluster.local:8086
-    database: jmeter
-    jsonData:
-      version: InfluxQL
-      httpMode: GET
