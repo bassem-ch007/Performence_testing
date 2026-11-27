@@ -1,7 +1,7 @@
 {
   "uid": "workshop-grpc-scaling",
   "title": "Workshop · 03 · Replica distribution — baseline gRPC",
-  "description": "Stage 03: compare 3 healthy product replicas with completed inbound gRPC calls and separately distributed direct HTTP requests. Empty/zero product HTTP errors DO NOT mean JMeter passed; JMeter reports all services, timeouts and assertion failures. Each running product pod gets its own traffic panel. Use identical order-heavy workloads to compare Stage 04.",
+  "description": "Stage 03: diagnose baseline order-service gRPC connection pinning with 3 product replicas. Compact dashboard with 6 panels, absolute gRPC per-pod counts, shares and separate direct HTTP distribution. JMeter client error rates belong in JTL results, NOT in Spring product HTTP counters.",
   "tags": [
     "workshop",
     "k3s",
@@ -19,7 +19,7 @@
     {
       "id": 1,
       "type": "stat",
-      "title": "Product pods responding to Prometheus (live)",
+      "title": "Healthy product pods (scrape targets)",
       "description": "Observed healthy scrape targets; verify Kubernetes Ready/Available replicas separately.",
       "gridPos": {
         "x": 0,
@@ -60,55 +60,12 @@
       }
     },
     {
-      "id": 2,
-      "type": "stat",
-      "title": "Product pod scrape targets (live)",
-      "description": "Total discovered Prometheus scrape targets; inspect Pod status separately. Compare to healthy count.",
-      "gridPos": {
-        "x": 6,
-        "y": 0,
-        "w": 6,
-        "h": 5
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "count(up{job=\"spring-boot-staging\",application=\"product-service\",namespace=\"staging\"})",
-          "legendFormat": "Discovered"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "orientation": "horizontal",
-        "textMode": "auto",
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto"
-      }
-    },
-    {
       "id": 3,
       "type": "stat",
-      "title": "Completed product gRPC calls (selected period)",
+      "title": "Recorded product gRPC calls",
       "description": "Observed requests received by product-service over gRPC from order-service; selected Grafana time range.",
       "gridPos": {
-        "x": 12,
+        "x": 6,
         "y": 0,
         "w": 6,
         "h": 5
@@ -148,13 +105,13 @@
     {
       "id": 5,
       "type": "timeseries",
-      "title": "gRPC calls handled by each pod (calls/sec)",
+      "title": "Incoming gRPC calls by pod (calls/sec)",
       "description": "Completed gRPC calls/second by receiving product pod. In your baseline test, one pod receives almost all the gRPC calls.",
       "gridPos": {
         "x": 0,
         "y": 5,
         "w": 12,
-        "h": 8
+        "h": 9
       },
       "datasource": {
         "type": "prometheus",
@@ -186,13 +143,13 @@
     {
       "id": 6,
       "type": "timeseries",
-      "title": "Direct HTTP requests per pod (req/sec)",
+      "title": "Direct HTTP requests by pod (req/sec)",
       "description": "Direct product HTTP traffic per pod (NOT the gRPC calls). Three close series here do not imply gRPC balancing.",
       "gridPos": {
         "x": 12,
         "y": 5,
         "w": 12,
-        "h": 8
+        "h": 9
       },
       "datasource": {
         "type": "prometheus",
@@ -224,12 +181,12 @@
     {
       "id": 7,
       "type": "timeseries",
-      "title": "gRPC traffic share (%) — each pod",
-      "description": "A pod's gRPC calls divided by total product gRPC calls in the same one-minute interval. This uses scalar(...) to correctly compare pod-labelled and unlabelled Prometheus series. No data when total gRPC traffic is zero.",
+      "title": "gRPC traffic share by pod (%) — selected time range",
+      "description": "Percent of recorded completed product gRPC calls handled by each pod over the selected time range. 100% on one pod with three healthy pods indicates severe imbalance; a completely idle pod may appear with no time series, not an explicit zero. Requires actual order-service traffic.",
       "gridPos": {
         "x": 0,
-        "y": 13,
-        "w": 12,
+        "y": 14,
+        "w": 24,
         "h": 8
       },
       "datasource": {
@@ -239,7 +196,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "100 * sum by (pod) (rate(grpc_server_seconds_count{namespace=\"staging\",application=\"product-service\"}[1m])) / clamp_min(scalar(sum(rate(grpc_server_seconds_count{namespace=\"staging\",application=\"product-service\"}[1m]))), 0.001)",
+          "expr": "100 * sum by (pod) (increase(grpc_server_seconds_count{namespace=\"staging\",application=\"product-service\"}[$__range])) / scalar(clamp_min(sum(increase(grpc_server_seconds_count{namespace=\"staging\",application=\"product-service\"}[$__range])), 0.001))",
           "legendFormat": "{{pod}}"
         }
       ],
@@ -262,13 +219,13 @@
     {
       "id": 8,
       "type": "timeseries",
-      "title": "gRPC calls received by pod — selected period",
+      "title": "gRPC call count by pod — selected time range",
       "description": "Count of completed product gRPC calls during the visible Grafana time range, grouped by actual pod. Compare active pods only, and note stale pod IDs after rollouts.",
       "gridPos": {
         "x": 12,
-        "y": 13,
+        "y": 0,
         "w": 12,
-        "h": 8
+        "h": 5
       },
       "datasource": {
         "type": "prometheus",
@@ -296,137 +253,6 @@
           "placement": "bottom"
         }
       }
-    },
-    {
-      "id": 10,
-      "type": "timeseries",
-      "title": "CPU per product pod (cores)",
-      "description": "Supporting evidence only: CPU disparity alone does not demonstrate a gRPC imbalance.",
-      "gridPos": {
-        "x": 12,
-        "y": 13,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (pod)(rate(container_cpu_usage_seconds_total{namespace=\"staging\",pod=~\"product-service-.*\",container=\"product-service\"}[1m]))",
-          "legendFormat": "{{pod}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        }
-      }
-    },
-    {
-      "id": 13,
-      "type": "text",
-      "title": "How to read errors: JMeter vs Prometheus",
-      "description": "",
-      "gridPos": {
-        "x": 0,
-        "y": 21,
-        "w": 24,
-        "h": 8
-      },
-      "options": {
-        "mode": "markdown",
-        "content": "### Important: HTTP 0 ≠ JMeter 0\n\n**This dashboard focuses on replica distribution, not JMeter request-success rates.** Prometheus in product-service counts HTTP requests reaching that application only. **It cannot see** client-side timeouts, refused connections, DNS problems, assertion failures, errors at order-service or user-service, or a rejected gRPC call without a product HTTP response. A JMeter `Err` count can be high even while product HTTP 4xx/5xx/6xx metrics are zero.\n\n**For actual error causes:** run `python3 loadtest/jmeter/analyze-jtl.py PATH/TO/results.jtl` on the test host; inspect response codes and messages (HTTP 4xx/5xx, nonstandard 6xx, transport errors, assertion failures) and inspect the Stage 02 microservices dashboard for HTTP errors across all applications.\n\n**Imbalance diagnosis:** three healthy product pods + HTTP requests distributed among them + completed gRPC calls concentrated on one pod is evidence of baseline gRPC connection pinning. **An exact 33/33/33 distribution is not guaranteed**, and spike overload can introduce unrelated errors.\n\n**No JMeter failure series is ingested into Prometheus:** JMeter's console output and JTL results are the source of truth for client-observed failures."
-      }
-    },
-    {
-      "id": 11,
-      "type": "timeseries",
-      "title": "Pod $product_pod — gRPC vs direct HTTP (req/s)",
-      "description": "One panel for every CURRENT healthy product scrape target: green = completed gRPC server calls, yellow = direct product HTTP. JMeter failures must be examined using JTL; they cannot be inferred from these curves.",
-      "gridPos": {
-        "x": 0,
-        "y": 29,
-        "w": 8,
-        "h": 10
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(rate(grpc_server_seconds_count{namespace=\"staging\",application=\"product-service\",pod=\"$product_pod\"}[1m])) or vector(0)",
-          "legendFormat": "gRPC completed /s"
-        },
-        {
-          "refId": "B",
-          "expr": "sum(rate(http_server_requests_seconds_count{namespace=\"staging\",application=\"product-service\",pod=\"$product_pod\",uri!~\"/actuator.*\"}[1m])) or vector(0)",
-          "legendFormat": "HTTP requests /s"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "reqps"
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        }
-      },
-      "repeat": "product_pod",
-      "repeatDirection": "h",
-      "maxPerRow": 3
     }
-  ],
-  "templating": {
-    "list": [
-      {
-        "name": "product_pod",
-        "label": "Product pod (automatic)",
-        "type": "query",
-        "datasource": {
-          "type": "prometheus",
-          "uid": "prometheus"
-        },
-        "refresh": 2,
-        "query": {
-          "query": "query_result(up{job=\"spring-boot-staging\",application=\"product-service\",namespace=\"staging\"} == 1)",
-          "refId": "product_pod"
-        },
-        "definition": "query_result(up{job=\"spring-boot-staging\",application=\"product-service\",namespace=\"staging\"} == 1)",
-        "multi": true,
-        "includeAll": true,
-        "sort": 1,
-        "hide": 2,
-        "current": {
-          "text": "All",
-          "value": "$__all",
-          "selected": true
-        },
-        "options": [],
-        "allValue": ".*",
-        "regex": "/pod=\"([^\"]+)\"/"
-      }
-    ]
-  }
+  ]
 }
