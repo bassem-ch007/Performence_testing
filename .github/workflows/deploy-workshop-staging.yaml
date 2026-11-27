@@ -1,0 +1,87 @@
+name: Deploy workshop image to Azure k3s staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: Existing active staging Deployment
+        type: choice
+        required: true
+        options: [monolith, user-service, product-service, order-service]
+      image_tag:
+        description: Pre-published Docker Hub SEMVER image (e.g. 1.1.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workshop-staging-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: workshop-staging
+    steps:
+      - name: Check deployment inputs
+        env:
+          TAG: ${{ inputs.image_tag }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "::error::image_tag must be semver x.y.z"
+            exit 1
+          }
+
+      - name: Check out approved deployment script
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Configure private SSH credentials and pinned server identity
+        env:
+          DEPLOY_KEY: ${{ secrets.WORKSHOP_SSH_PRIVATE_KEY }}
+          KNOWN_HOSTS: ${{ secrets.WORKSHOP_SSH_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ vars.WORKSHOP_SSH_HOST }}
+          DEPLOY_USER: ${{ vars.WORKSHOP_SSH_USER }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_KEY" && test -n "$KNOWN_HOSTS" &&
+            test -n "$DEPLOY_HOST" && test -n "$DEPLOY_USER" || {
+              echo "::error::Configure the workshop-staging environment secrets and variables before dispatch."
+              exit 1
+            }
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_KEY" > "$HOME/.ssh/workshop_deploy"
+          chmod 600 "$HOME/.ssh/workshop_deploy"
+          printf '%s\n' "$KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          printf '%s\n' 'Host workshop-azure' '  HostName '"$DEPLOY_HOST" '  User '"$DEPLOY_USER" '  IdentityFile ~/.ssh/workshop_deploy' '  IdentitiesOnly yes' '  StrictHostKeyChecking yes' > "$HOME/.ssh/config"
+          chmod 600 "$HOME/.ssh/config"
+
+      - name: Upload deployment script to existing Azure VM
+        run: |
+          set -euo pipefail
+          scp -o ConnectTimeout=15 scripts/workshop-deploy.sh workshop-azure:/tmp/workshop-deploy.sh
+
+      - name: Deploy selected prebuilt image with health check and rollback
+        env:
+          SERVICE: ${{ inputs.service }}
+          TAG: ${{ inputs.image_tag }}
+        run: |
+          set -euo pipefail
+          ssh -o ConnectTimeout=15 workshop-azure \
+            "bash /tmp/workshop-deploy.sh '$SERVICE' '$TAG'"
+
+      - name: Deployment summary
+        if: success()
+        env:
+          SERVICE: ${{ inputs.service }}
+          TAG: ${{ inputs.image_tag }}
+        run: |
+          echo "### Azure k3s staging CD succeeded" >> "$GITHUB_STEP_SUMMARY"
+          echo "Service: $SERVICE" >> "$GITHUB_STEP_SUMMARY"
+          echo "Image tag: $TAG" >> "$GITHUB_STEP_SUMMARY"
+          echo "The script updated only the active staging deployment." >> "$GITHUB_STEP_SUMMARY"
