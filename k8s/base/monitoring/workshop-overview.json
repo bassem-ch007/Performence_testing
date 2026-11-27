@@ -1,13 +1,13 @@
 {
   "uid": "workshop-k3s",
-  "title": "Workshop · K3s live overview",
+  "title": "Workshop · 00 · Cluster overview",
   "tags": [
     "workshop",
     "k3s"
   ],
   "timezone": "browser",
   "schemaVersion": 41,
-  "version": 1,
+  "version": 2,
   "refresh": "5s",
   "time": {
     "from": "now-15m",
@@ -17,10 +17,87 @@
     {
       "id": 1,
       "type": "timeseries",
-      "title": "HTTP requests / sec by application",
+      "title": "CPU usage by application (cores)",
+      "description": "CPU consumed by each application container. Higher CPU is not necessarily an error.",
       "gridPos": {
         "x": 0,
         "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (container) (rate(container_cpu_usage_seconds_total{namespace=\"staging\",container!=\"\",container!=\"POD\"}[1m]))",
+          "legendFormat": "{{container}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Memory working set by application",
+      "description": "Memory actively used by each application container.",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (container) (container_memory_working_set_bytes{namespace=\"staging\",container!=\"\",container!=\"POD\"})",
+          "legendFormat": "{{container}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "HTTP requests per second by application",
+      "description": "Server-side HTTP throughput; excludes Actuator endpoints.",
+      "gridPos": {
+        "x": 0,
+        "y": 8,
         "w": 12,
         "h": 8
       },
@@ -40,68 +117,22 @@
           "unit": "reqps"
         },
         "overrides": []
-      }
-    },
-    {
-      "id": 2,
-      "type": "timeseries",
-      "title": "p95 HTTP latency (seconds)",
-      "gridPos": {
-        "x": 12,
-        "y": 0,
-        "w": 12,
-        "h": 8
       },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "histogram_quantile(0.95,sum by (application,le) (rate(http_server_requests_seconds_bucket{namespace=\"staging\",uri!~\"/actuator.*\"}[1m])))",
-          "legendFormat": "{{application}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s"
+      "options": {
+        "tooltip": {
+          "mode": "multi"
         },
-        "overrides": []
-      }
-    },
-    {
-      "id": 3,
-      "type": "timeseries",
-      "title": "CPU usage by Kubernetes pod (cores)",
-      "gridPos": {
-        "x": 0,
-        "y": 8,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"staging\",container!=\"\",container!=\"POD\"}[1m]))",
-          "legendFormat": "{{pod}}"
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
         }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short"
-        },
-        "overrides": []
       }
     },
     {
       "id": 4,
       "type": "timeseries",
-      "title": "Memory by Kubernetes pod",
+      "title": "HTTP 5xx errors per second by application",
+      "description": "Server-side HTTP 5xx counts. Client-side timeouts may not appear.",
       "gridPos": {
         "x": 12,
         "y": 8,
@@ -115,154 +146,26 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"staging\",container!=\"\",container!=\"POD\"})",
-          "legendFormat": "{{pod}}"
+          "expr": "sum by (application) (rate(http_server_requests_seconds_count{namespace=\"staging\",status=~\"5..\",uri!~\"/actuator.*\"}[1m]))",
+          "legendFormat": "{{application}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes"
+          "unit": "reqps"
         },
         "overrides": []
-      }
-    },
-    {
-      "id": 5,
-      "type": "logs",
-      "title": "Application pod logs",
-      "gridPos": {
-        "x": 0,
-        "y": 16,
-        "w": 24,
-        "h": 8
       },
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "{job=\"fluent-bit\"}"
-        }
-      ],
       "options": {
-        "showTime": true,
-        "showLabels": true,
-        "wrapLogMessage": true
-      }
-    },
-    {
-      "id": 6,
-      "type": "timeseries",
-      "title": "Product pods — HTTP requests/sec (direct JMeter traffic)",
-      "gridPos": {
-        "x": 0,
-        "y": 24,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (pod) (rate(http_server_requests_seconds_count{namespace=\"staging\",application=\"product-service\",uri!~\"/actuator.*\"}[1m]))",
-          "legendFormat": "{{pod}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "reqps"
+        "tooltip": {
+          "mode": "multi"
         },
-        "overrides": []
-      }
-    },
-    {
-      "id": 7,
-      "type": "timeseries",
-      "title": "Product pods — CPU usage (cores)",
-      "gridPos": {
-        "x": 12,
-        "y": 24,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"staging\",pod=~\"product-service-.*\",container=\"product-service\"}[1m]))",
-          "legendFormat": "{{pod}}"
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
         }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short"
-        },
-        "overrides": []
-      }
-    },
-    {
-      "id": 8,
-      "type": "timeseries",
-      "title": "Product pods — gRPC calls/sec",
-      "gridPos": {
-        "x": 0,
-        "y": 32,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (pod) (rate(grpc_server_seconds_count{namespace=\"staging\",application=\"product-service\"}[1m]))",
-          "legendFormat": "{{pod}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "reqps"
-        },
-        "overrides": []
-      }
-    },
-    {
-      "id": 9,
-      "type": "timeseries",
-      "title": "Product pods — total completed gRPC calls",
-      "gridPos": {
-        "x": 12,
-        "y": 32,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (pod) (increase(grpc_server_seconds_count{namespace=\"staging\",application=\"product-service\"}[$__range]))",
-          "legendFormat": "{{pod}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short"
-        },
-        "overrides": []
       }
     }
-  ]
+  ],
+  "description": "Observe whether the applications are healthy and how load changes resource demand."
 }
