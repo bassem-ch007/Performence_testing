@@ -35,129 +35,114 @@ health() {
     --image=curlimages/curl:8.12.1 -- \
     --fail --silent --show-error --max-time 12 "http://$service:$port/actuator/health" >/dev/null
 }
-# Health is checked through Kubernetes service DNS. Existing ready probes also protect rollouts.
+# Every public stage prepares its own target state; no assumptions about prior stages.
+# Stage 05-preflight intentionally restores a known old product image before CI.
+baseline_user='bassem00/perf-user-service:1.0.0'
+baseline_mono='bassem00/perf-monolith:1.0.0'
+
+preflight() {
+  kubectl -n data get statefulset postgres >/dev/null
+  local dbready
+  dbready="$(kubectl -n data get statefulset postgres -o jsonpath='{.status.readyReplicas}')"
+  [[ "${dbready:-0}" -ge 1 ]] || { echo "PostgreSQL is not ready" >&2; exit 1; }
+  kubectl -n "$ns" get secret app-postgres-auth >/dev/null
+  for name in ecommerce-mono user-service product-service order-service; do
+    kubectl -n "$ns" get deployment "$name" >/dev/null
+    kubectl -n "$ns" get service "$name" >/dev/null
+  done
+}
+setimage_if_changed() {
+  local deployment="$1" image="$2"
+  if [[ "$(getimage "$deployment")" != "$image" ]]; then
+    kubectl -n "$ns" set image "deployment/$deployment" "$deployment=$image"
+  fi
+}
+# Atomic strategic merge of the order image, gRPC target and policy. Other env
+# entries (database secrets, metrics tags etc.) are retained by name.
+setorder() {
+  local image="$1" target="$2" policy="$3" patch
+  patch="$(printf '{"spec":{"template":{"spec":{"containers":[{"name":"order-service","image":"%s","env":[{"name":"PRODUCT_GRPC_TARGET","value":"%s"},{"name":"GRPC_LOAD_BALANCING_POLICY","value":"%s"}]}]}}}}' "$image" "$target" "$policy")"
+  kubectl -n "$ns" patch deployment order-service --type=strategic -p "$patch" >/dev/null
+}
+# From ANY prior architecture, build a healthy baseline microservices state.
+# Replica counts and image tags are target values, not preconditions.
+prepare_microservices() {
+  local products="$1"
+  preflight
+  kubectl -n "$ns" scale deployment/ecommerce-mono --replicas=0
+  setimage_if_changed user-service "$baseline_user"
+  setimage_if_changed product-service "$baseline_product"
+  setorder "$baseline_order" "$baseline_target" pick_first
+  setreplicas user-service 1
+  setreplicas product-service "$products"
+  setreplicas order-service 1
+  for dep in user-service product-service order-service; do ready "$dep"; done
+  health user-service 8081
+  health product-service 8082
+  health order-service 8083
+}
 case "$stage" in
   01)
-    echo "Stage 01: monolith only; other services off"
+    echo "Stage 01: restore one baseline monolith; stop microservices"
+    preflight
     setreplicas user-service 0
-    setreplicas product-service 0
     setreplicas order-service 0
+    setreplicas product-service 0
+    setimage_if_changed ecommerce-mono "$baseline_mono"
     setreplicas ecommerce-mono 1
     ready ecommerce-mono
     health ecommerce-mono 8080
     ;;
   02)
-    echo "Stage 02: microservices baseline, one replica each"
-    # Fail before shutting down the monolith if shared dependencies are missing.
-    kubectl -n data get statefulset postgres >/dev/null
-    dbready="$(kubectl -n data get statefulset postgres -o jsonpath='{.status.readyReplicas}')"
-    [[ "${dbready:-0}" -ge 1 ]] || { echo "PostgreSQL is not ready; keeping monolith running" >&2; exit 1; }
-    kubectl -n "$ns" get secret app-postgres-auth >/dev/null
-    for name in user-service product-service order-service; do
-      kubectl -n "$ns" get deployment "$name" >/dev/null
-      kubectl -n "$ns" get service "$name" >/dev/null
-    done
-    setreplicas ecommerce-mono 0
-    # Return to known baseline for repeatability after stages 03/04/05.
-    kubectl -n "$ns" set image deployment/order-service "order-service=$baseline_order"
-    kubectl -n "$ns" set env deployment/order-service \
-      "PRODUCT_GRPC_TARGET=$baseline_target" "GRPC_LOAD_BALANCING_POLICY=pick_first"
-    kubectl -n "$ns" set image deployment/product-service "product-service=$baseline_product"
-    setreplicas user-service 1
-    setreplicas product-service 1
-    setreplicas order-service 1
-    for s in user-service product-service order-service; do ready "$s"; done
-    health user-service 8081
-    health product-service 8082
-    health order-service 8083
+    echo "Stage 02: independently prepare baseline microservices (1 product replica)"
+    prepare_microservices 1
     ;;
   03)
-    echo "Stage 03: product-service 3 replicas, baseline gRPC order-service"
-    [[ "$(getreplicas ecommerce-mono)" == 0 ]] || { echo "Stop monolith first (Stage 02)" >&2; exit 1; }
-    assert_replicas user-service 1
-    assert_replicas order-service 1
-    assert_replicas product-service 1
-    ready user-service
-    ready order-service
-    ready product-service
-    [[ "$(getimage order-service)" == "$baseline_order" ]] || { echo "Order version is not 1.0.0; first run Stage 02" >&2; exit 1; }
-    [[ "$(getimage product-service)" == "$baseline_product" ]] || { echo "Product version is not 1.0.0; first run Stage 02" >&2; exit 1; }
-    target="$(kubectl -n "$ns" get deployment order-service -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="PRODUCT_GRPC_TARGET")].value}')"
-    [[ "$target" == "$baseline_target" ]] || { echo "Order-service is not using the baseline gRPC target; rerun Stage 02" >&2; exit 1; }
-    setreplicas product-service 3
-    ready product-service
-    health product-service 8082
+    echo "Stage 03: independently prepare baseline microservices (3 product replicas)"
+    prepare_microservices 3
     ;;
   04)
-    echo "Stage 04: deploy prebuilt corrected order-service with headless gRPC round-robin"
-    [[ "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "$tag" != 1.0.0 ]] || { echo "Specify a published corrected version other than 1.0.0" >&2; exit 2; }
-    assert_replicas ecommerce-mono 0
-    assert_replicas product-service 3
-    assert_replicas order-service 1
-    assert_replicas user-service 1
-    ready product-service
-    ready order-service
-    ready user-service
-    [[ "$(getimage order-service)" == "$baseline_order" ]] || { echo "Stage 04 requires baseline order-service; run Stage 02 then 03" >&2; exit 1; }
-    [[ "$(getimage product-service)" == "$baseline_product" ]] || { echo "Stage 04 requires baseline product-service; run Stage 02 then 03" >&2; exit 1; }
+    echo "Stage 04: independently prepare corrected order-service with 3 baseline product replicas"
+    [[ "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "$tag" != "1.0.0" ]] || { echo "Provide a published corrected order-service version" >&2; exit 2; }
+    # Do not change the cluster if a required prerequisite is missing.
     kubectl -n "$ns" get svc product-service-grpc-headless >/dev/null
+    prepare_microservices 3
     before="$(getimage order-service)"
     oldtarget="$(kubectl -n "$ns" get deployment order-service -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="PRODUCT_GRPC_TARGET")].value}')"
     oldpolicy="$(kubectl -n "$ns" get deployment order-service -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="GRPC_LOAD_BALANCING_POLICY")].value}')"
-    restore_order() {
-      kubectl -n "$ns" set image deployment/order-service "order-service=$before"
-      kubectl -n "$ns" set env deployment/order-service "PRODUCT_GRPC_TARGET=$oldtarget"
-      if [[ -n "$oldpolicy" ]]; then
-        kubectl -n "$ns" set env deployment/order-service "GRPC_LOAD_BALANCING_POLICY=$oldpolicy"
-      else
-        kubectl -n "$ns" set env deployment/order-service GRPC_LOAD_BALANCING_POLICY-
-      fi
-      ready order-service || true
-    }
-    # one rollout (image + env) by applying a JSON merge patch.
-    patch="$(printf '{"spec":{"template":{"spec":{"containers":[{"name":"order-service","image":"bassem00/perf-order-service:%s","env":[{"name":"PRODUCT_GRPC_TARGET","value":"%s"},{"name":"GRPC_LOAD_BALANCING_POLICY","value":"round_robin"}]}]}}}}' "$tag" "$corrected_target")"
-    # Strategic merge patch avoids replacing other container env settings.
-    kubectl -n "$ns" patch deployment order-service --type=strategic -p "$patch"
+    setorder "bassem00/perf-order-service:$tag" "$corrected_target" round_robin
     if ! ready order-service || ! health order-service 8083; then
-      echo "Order-service rollout or health failed; restoring prior image and gRPC settings" >&2
-      restore_order
+      echo "Stage 04 failed; restore previous working order-service image and settings" >&2
+      setorder "$before" "$oldtarget" "${oldpolicy:-pick_first}"
+      ready order-service || true
       exit 1
     fi
     ;;
   05-check)
-    echo "Stage 05 preflight: verify active microservices before CI"
-    assert_replicas ecommerce-mono 0
-    assert_replicas user-service 1
-    assert_replicas order-service 1
-    assert_replicas product-service 3
-    # Stage 05 is independent of Stage 04; either baseline or corrected
-    # order-service is acceptable as long as it is available.
-    ready product-service
-    ready order-service
-    health product-service 8082
-    echo "Stage 05 preflight passed"
+    echo "Stage 05 preparation: independently restore 3 old product replicas before CI"
+    prepare_microservices 3
+    [[ "$(getimage product-service)" == "$baseline_product" ]] || { echo "Old product-service image not restored" >&2; exit 1; }
+    echo "Stage 05 baseline is healthy and ready for CI"
     exit 0
     ;;
   05)
-    echo "Stage 05: rolling product-service update from CI artifact"
-    [[ "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "$tag" != 1.0.0 ]] || { echo "Specify a published new product image version" >&2; exit 2; }
-    assert_replicas ecommerce-mono 0
-    assert_replicas user-service 1
-    assert_replicas order-service 1
-    assert_replicas product-service 3
-    ready product-service
-    ready order-service
+    echo "Stage 05: CI/CD rolls 3 old product replicas to a new image"
+    [[ "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "$tag" != "1.0.0" ]] || { echo "Provide a new semver image tag" >&2; exit 2; }
+    preflight
+    [[ "$(getreplicas product-service)" == 3 ]] || { echo "Stage 05 baseline changed after preflight; aborting" >&2; exit 1; }
+    [[ "$(getimage product-service)" == "$baseline_product" ]] || { echo "Stage 05 baseline image changed after preflight; aborting" >&2; exit 1; }
+    for dep in user-service order-service product-service; do ready "$dep"; done
     kubectl -n "$ns" patch deployment product-service --type=strategic -p '{"spec":{"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxSurge":1,"maxUnavailable":0}}}}'
     before="$(getimage product-service)"
     kubectl -n "$ns" set image deployment/product-service "product-service=bassem00/perf-product-service:$tag"
     if ! ready product-service || ! health product-service 8082; then
-      echo "Product rollout or health failed; restoring previous image" >&2
+      echo "Stage 05 failed; restoring previous product-service image" >&2
       kubectl -n "$ns" set image deployment/product-service "product-service=$before"
       ready product-service || true
       exit 1
     fi
     ;;
-  *) echo "Usage: bash workshop-stage.sh 01|02|03|04 TAG|05 TAG" >&2; exit 2 ;;
+  *) echo "Usage: bash workshop-stage.sh 01|02|03|04 TAG|05-check|05 TAG" >&2; exit 2 ;;
 esac
 echo "Stage $stage completed"
 kubectl -n "$ns" get deployment ecommerce-mono user-service product-service order-service -o wide
