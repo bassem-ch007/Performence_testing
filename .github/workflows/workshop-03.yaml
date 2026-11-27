@@ -1,0 +1,12 @@
+# Keep original order-service image and scale product-service to three replicas.
+name: "03 · Manual scaling — baseline gRPC"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  stage:
+    uses: ./.github/workflows/workshop-stage-engine.yaml
+    with:
+      stage: "03"
+    secrets: inherit
