@@ -1,4 +1,7 @@
 apiVersion: 1
+deleteDatasources:
+  - name: JMeter InfluxDB
+    orgId: 1
 datasources:
   - name: Prometheus
     uid: prometheus
