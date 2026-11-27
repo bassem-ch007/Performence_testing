@@ -12,7 +12,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 41,
-  "version": 2,
+  "version": 3,
   "refresh": "5s",
   "time": {
     "from": "now-15m",
@@ -80,8 +80,8 @@
     {
       "id": 1,
       "type": "timeseries",
-      "title": "HTTP throughput by service (requests/sec)",
-      "description": "HTTP requests served by each microservice.",
+      "title": "HTTP throughput by service (req/s)",
+      "description": "All three services appear when serving traffic; this is REST traffic, not gRPC.",
       "gridPos": {
         "x": 0,
         "y": 0,
@@ -95,7 +95,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (application) (rate(http_server_requests_seconds_count{namespace=\"staging\",architecture=\"microservices\",uri!~\"/actuator.*\"}[1m]))",
+          "expr": "sum by (application) (rate(http_server_requests_seconds_count{namespace=\"staging\",uri!~\"/actuator.*\",architecture=\"microservices\"}[1m]))",
           "legendFormat": "{{application}}"
         }
       ],
@@ -118,8 +118,8 @@
     {
       "id": 2,
       "type": "timeseries",
-      "title": "HTTP p95 response time by service (ms)",
-      "description": "Estimated p95 per service.",
+      "title": "HTTP requests by service, method & endpoint (req/s)",
+      "description": "Which service and REST endpoint receives GET or POST calls.",
       "gridPos": {
         "x": 12,
         "y": 0,
@@ -133,13 +133,13 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "1000 * histogram_quantile(0.95, sum by (application, le) (rate(http_server_requests_seconds_bucket{namespace=\"staging\",architecture=\"microservices\",uri!~\"/actuator.*\"}[1m])))",
-          "legendFormat": "{{application}}"
+          "expr": "sum by (application,method,uri) (rate(http_server_requests_seconds_count{namespace=\"staging\",uri!~\"/actuator.*\",architecture=\"microservices\"}[1m]))",
+          "legendFormat": "{{application}} {{method}} {{uri}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "ms"
+          "unit": "reqps"
         },
         "overrides": []
       },
@@ -156,8 +156,8 @@
     {
       "id": 3,
       "type": "timeseries",
-      "title": "HTTP p99 response time by service (ms)",
-      "description": "Estimated slowest 1% tail by service.",
+      "title": "Requests handled in selected range — service & type",
+      "description": "Number of REST requests by application, method and endpoint during the selected time range.",
       "gridPos": {
         "x": 0,
         "y": 8,
@@ -171,7 +171,45 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "1000 * histogram_quantile(0.99, sum by (application, le) (rate(http_server_requests_seconds_bucket{namespace=\"staging\",architecture=\"microservices\",uri!~\"/actuator.*\"}[1m])))",
+          "expr": "sum by (application,method,uri) (increase(http_server_requests_seconds_count{namespace=\"staging\",uri!~\"/actuator.*\",architecture=\"microservices\"}[$__range]))",
+          "legendFormat": "{{application}} {{method}} {{uri}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "HTTP p95 response time by service (ms)",
+      "description": "p95 of each microservice's server-side HTTP requests.",
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "1000 * histogram_quantile(0.95, sum by (application, le) (rate(http_server_requests_seconds_bucket{namespace=\"staging\",uri!~\"/actuator.*\",architecture=\"microservices\"}[1m])))",
           "legendFormat": "{{application}}"
         }
       ],
@@ -192,13 +230,13 @@
       }
     },
     {
-      "id": 4,
+      "id": 5,
       "type": "timeseries",
-      "title": "HTTP 5xx error rate by service (%)",
-      "description": "5xx error rate by service; see JMeter for network failures.",
+      "title": "HTTP p99 response time by service (ms)",
+      "description": "p99 of each microservice's server-side HTTP requests.",
       "gridPos": {
-        "x": 12,
-        "y": 8,
+        "x": 0,
+        "y": 16,
         "w": 12,
         "h": 8
       },
@@ -209,7 +247,45 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "100 * sum by (application) (rate(http_server_requests_seconds_count{namespace=\"staging\",architecture=\"microservices\",uri!~\"/actuator.*\",status=~\"5..\"}[1m])) / clamp_min(sum by (application) (rate(http_server_requests_seconds_count{namespace=\"staging\",architecture=\"microservices\",uri!~\"/actuator.*\"}[1m])), 0.001)",
+          "expr": "1000 * histogram_quantile(0.99, sum by (application, le) (rate(http_server_requests_seconds_bucket{namespace=\"staging\",uri!~\"/actuator.*\",architecture=\"microservices\"}[1m])))",
+          "legendFormat": "{{application}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "HTTP 5xx error rate by service (%)",
+      "description": "Displays 0% for every active service with no 5xx responses, rather than an empty panel.",
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * ((sum by (application) (rate(http_server_requests_seconds_count{namespace=\"staging\",uri!~\"/actuator.*\",architecture=\"microservices\",status=~\"5..\"}[1m]))) or on (application) (0 * sum by (application) (rate(http_server_requests_seconds_count{namespace=\"staging\",uri!~\"/actuator.*\",architecture=\"microservices\"}[1m])))) / clamp_min(sum by (application) (rate(http_server_requests_seconds_count{namespace=\"staging\",uri!~\"/actuator.*\",architecture=\"microservices\"}[1m])), 0.001)",
           "legendFormat": "{{application}}"
         }
       ],
@@ -230,13 +306,13 @@
       }
     },
     {
-      "id": 5,
+      "id": 7,
       "type": "timeseries",
-      "title": "CPU usage by service (cores)",
-      "description": "CPU consumed by each microservice.",
+      "title": "CPU usage by pod (cores)",
+      "description": "Shows all running microservice pods separately; useful when one service scales.",
       "gridPos": {
         "x": 0,
-        "y": 16,
+        "y": 24,
         "w": 12,
         "h": 8
       },
@@ -247,8 +323,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (container) (rate(container_cpu_usage_seconds_total{namespace=\"staging\",container=~\"user-service|product-service|order-service\"}[1m]))",
-          "legendFormat": "{{container}}"
+          "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"staging\",container=~\"user-service|product-service|order-service\"}[1m]))",
+          "legendFormat": "{{pod}}"
         }
       ],
       "fieldConfig": {
@@ -268,13 +344,13 @@
       }
     },
     {
-      "id": 6,
+      "id": 8,
       "type": "timeseries",
-      "title": "Incoming gRPC calls by service (calls/sec)",
-      "description": "Completed gRPC server calls, observed by the receiving service.",
+      "title": "Incoming gRPC calls by receiving service (calls/sec)",
+      "description": "Server-side completed gRPC requests, different from direct REST traffic.",
       "gridPos": {
         "x": 12,
-        "y": 16,
+        "y": 24,
         "w": 12,
         "h": 8
       },
